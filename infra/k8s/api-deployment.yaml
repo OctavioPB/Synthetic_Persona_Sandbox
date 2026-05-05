@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spb-api
+  labels:
+    app: spb-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: spb-api
+  template:
+    metadata:
+      labels:
+        app: spb-api
+    spec:
+      containers:
+        - name: api
+          image: spb-api:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: spb-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spb-api
+spec:
+  selector:
+    app: spb-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000

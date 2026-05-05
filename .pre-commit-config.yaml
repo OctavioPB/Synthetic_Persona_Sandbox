@@ -1,0 +1,48 @@
+repos:
+  # Python: ruff (linter + formatter)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Python: mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.0
+          - fastapi>=0.111.0
+
+  # General
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  # TypeScript / JavaScript: eslint + prettier (run from dashboard dir)
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint (dashboard)
+        language: node
+        entry: bash -c "cd dashboard && npx eslint --fix src/**/*.{ts,tsx}"
+        pass_filenames: false
+        files: ^dashboard/src/.*\.(ts|tsx)$
+
+      - id: prettier
+        name: Prettier (dashboard)
+        language: node
+        entry: bash -c "cd dashboard && npx prettier --write src/**/*.{ts,tsx,css}"
+        pass_filenames: false
+        files: ^dashboard/src/.*\.(ts|tsx|css)$
