@@ -1,6 +1,5 @@
 import React from 'react'
-
-type Page = 'dashboard'
+import { type Page } from '../App'
 
 interface NavProps {
   currentPage: Page
@@ -50,6 +49,7 @@ const navLinkActive: React.CSSProperties = {
 
 const pages: Array<{ id: Page; label: string }> = [
   { id: 'dashboard', label: 'Dashboard' },
+  { id: 'segments',  label: 'Segments'  },
 ]
 
 export default function Nav({ currentPage, onNavigate }: NavProps): React.JSX.Element {
