@@ -265,12 +265,18 @@ async def get_run(
 ) -> SimulationRunResponse:
     """Get a single simulation run by ID."""
     from api.auth.jwt_handler import TokenClaims
+    from api.services.cache import cache_run, get_cached_run
     claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
     try:
         run_uid = uuid.UUID(run_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid run_id format") from exc
+
+    # Cache-aside: completed runs are immutable — serve from Redis when available
+    cached = await get_cached_run(run_id)
+    if cached and cached.get("org_id") == str(claims_typed.org_id):
+        return SimulationRunResponse(**cached)
 
     result = await db.execute(
         select(SimulationRunORM).where(
@@ -281,4 +287,7 @@ async def get_run(
     run = result.scalar_one_or_none()
     if run is None:
         raise HTTPException(status_code=404, detail="Simulation run not found")
-    return SimulationRunResponse.from_orm(run)
+
+    response = SimulationRunResponse.from_orm(run)
+    await cache_run(run_id, response.model_dump(mode="json"), run.status)
+    return response

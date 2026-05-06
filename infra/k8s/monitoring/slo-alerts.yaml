@@ -1,0 +1,104 @@
+# PrometheusRule — SLO burn-rate alerts (S10-04)
+# SLO targets:
+#   - API p99 latency < 2s  (99.5% of requests)
+#   - Simulation success rate > 98%  (error budget: 2%)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: spb-slo-alerts
+  namespace: spb
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # ── API latency SLO ──────────────────────────────────────────────────────
+    - name: spb.slo.latency
+      interval: 1m
+      rules:
+        # Burn-rate windows: 1h, 6h, 24h, 72h  (multi-window multi-burn-rate)
+        - alert: SPBApiLatencySLOBurn1h
+          expr: |
+            (
+              sum(rate(api_request_latency_seconds_bucket{job="spb-api", le="2"}[1h]))
+              /
+              sum(rate(api_request_latency_seconds_count{job="spb-api"}[1h]))
+            ) < 0.995
+          for: 5m
+          labels:
+            severity: page
+            slo: api-latency
+          annotations:
+            summary: "API latency SLO burning fast (1h window)"
+            description: "p99 latency SLO compliance is {{ $value | humanizePercentage }} over 1h (target: 99.5%)"
+            runbook_url: "https://github.com/opb/spb/wiki/Runbooks#api-latency"
+
+        - alert: SPBApiLatencySLOBurn6h
+          expr: |
+            (
+              sum(rate(api_request_latency_seconds_bucket{job="spb-api", le="2"}[6h]))
+              /
+              sum(rate(api_request_latency_seconds_count{job="spb-api"}[6h]))
+            ) < 0.995
+          for: 15m
+          labels:
+            severity: ticket
+            slo: api-latency
+          annotations:
+            summary: "API latency SLO burning (6h window)"
+            description: "p99 latency SLO compliance is {{ $value | humanizePercentage }} over 6h"
+
+    # ── Simulation success rate SLO ──────────────────────────────────────────
+    - name: spb.slo.simulation
+      interval: 1m
+      rules:
+        - alert: SPBSimulationErrorRateSLOBurn1h
+          expr: |
+            (
+              sum(rate(simulation_total{status="failed"}[1h]))
+              /
+              sum(rate(simulation_total[1h]))
+            ) > 0.02
+          for: 5m
+          labels:
+            severity: page
+            slo: simulation-success
+          annotations:
+            summary: "Simulation failure rate exceeds SLO (1h window)"
+            description: "Simulation error rate is {{ $value | humanizePercentage }} (SLO budget: 2%)"
+            runbook_url: "https://github.com/opb/spb/wiki/Runbooks#simulation-failure"
+
+        - alert: SPBSimulationQueueDepthHigh
+          expr: queue_depth > 50
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Simulation queue depth is high"
+            description: "Queue depth is {{ $value }} jobs. Workers may be overwhelmed."
+
+    # ── Availability SLO ─────────────────────────────────────────────────────
+    - name: spb.slo.availability
+      interval: 1m
+      rules:
+        - alert: SPBApiDown
+          expr: |
+            sum(up{job="spb-api"}) / count(up{job="spb-api"}) < 0.5
+          for: 2m
+          labels:
+            severity: page
+          annotations:
+            summary: "More than 50% of spb-api pods are down"
+            description: "Only {{ $value | humanizePercentage }} of API pods are healthy."
+
+        - alert: SPBHighErrorRate
+          expr: |
+            sum(rate(api_request_latency_seconds_count{status_code=~"5.."}[5m]))
+            /
+            sum(rate(api_request_latency_seconds_count[5m]))
+            > 0.05
+          for: 3m
+          labels:
+            severity: page
+          annotations:
+            summary: "API 5xx error rate > 5%"
+            description: "5xx rate is {{ $value | humanizePercentage }}"

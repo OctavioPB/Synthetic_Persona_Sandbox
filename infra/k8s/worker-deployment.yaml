@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spb-worker
+  namespace: spb
+  labels:
+    app: spb-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: synthetic-persona-sandbox
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: spb-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: spb-worker
+    spec:
+      terminationGracePeriodSeconds: 60    # allow in-flight jobs to complete
+      containers:
+        - name: worker
+          image: ghcr.io/opb/spb-api:latest
+          imagePullPolicy: Always
+          command: ["uv", "run", "python", "-m", "api.worker"]
+          envFrom:
+            - configMapRef:
+                name: spb-config
+            - secretRef:
+                name: spb-secrets
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import redis, os; r=redis.from_url(os.getenv('REDIS_URL','redis://localhost:6379')); r.ping()"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "768Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spb-worker
+  namespace: spb
+  labels:
+    app: spb-worker
+spec:
+  selector:
+    app: spb-worker
+  clusterIP: None    # headless — workers are addressable but not load-balanced

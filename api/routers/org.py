@@ -82,13 +82,23 @@ class AuditLogResponse(BaseModel):
 @router.get("", response_model=OrgResponse)
 async def get_org(claims: CurrentUser, db: DbDep) -> OrgResponse:
     """Return the caller's organization profile."""
+    from api.services.cache import cache_org, get_cached_org
+    org_id_str = str(claims.org_id)
+
+    cached = await get_cached_org(org_id_str)
+    if cached:
+        return OrgResponse(**cached)
+
     result = await db.execute(
         select(OrganizationORM).where(OrganizationORM.id == claims.org_id)
     )
     org = result.scalar_one_or_none()
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found.")
-    return OrgResponse(id=org.id, name=org.name, slug=org.slug, plan=org.plan)
+
+    response = OrgResponse(id=org.id, name=org.name, slug=org.slug, plan=org.plan)
+    await cache_org(org_id_str, response.model_dump(mode="json"))
+    return response
 
 
 @router.get("/members", response_model=MemberListResponse)

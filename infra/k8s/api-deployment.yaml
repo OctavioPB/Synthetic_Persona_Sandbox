@@ -2,54 +2,112 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: spb-api
+  namespace: spb
   labels:
     app: spb-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: synthetic-persona-sandbox
+    slot: blue           # blue/green slot — rotated by deploy workflow
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: spb-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0        # zero-downtime: always keep current replicas up
   template:
     metadata:
       labels:
         app: spb-api
+        slot: blue
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "8000"
+        prometheus.io/path:   "/metrics"
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
         - name: api
-          image: spb-api:latest
+          image: ghcr.io/opb/spb-api:latest
+          imagePullPolicy: Always
           ports:
-            - containerPort: 8000
+            - name: http
+              containerPort: 8000
+              protocol: TCP
           envFrom:
+            - configMapRef:
+                name: spb-config
             - secretRef:
                 name: spb-secrets
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
             periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /health
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            failureThreshold: 12      # up to 60 s for cold start
+            periodSeconds: 5
           resources:
             requests:
-              cpu: "100m"
-              memory: "256Mi"
+              cpu: "200m"
+              memory: "384Mi"
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "1000m"
+              memory: "1Gi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: spb-api
+                topologyKey: kubernetes.io/hostname
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: spb-api
+  namespace: spb
+  labels:
+    app: spb-api
 spec:
   selector:
     app: spb-api
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 80
       targetPort: 8000
+  type: ClusterIP

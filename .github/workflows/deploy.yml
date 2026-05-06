@@ -1,0 +1,263 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*.*.*"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  # ── Build & push Docker images ─────────────────────────────────────────────
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha_tag: ${{ steps.meta.outputs.sha_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image tags
+        id: meta
+        run: |
+          SHA_TAG="${GITHUB_SHA::8}"
+          echo "sha_tag=${SHA_TAG}" >> $GITHUB_OUTPUT
+          echo "api_image=${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/spb-api" >> $GITHUB_OUTPUT
+          echo "dashboard_image=${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/spb-dashboard" >> $GITHUB_OUTPUT
+
+      - name: Build & push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/Dockerfile.api
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.api_image }}:${{ steps.meta.outputs.sha_tag }}
+            ${{ steps.meta.outputs.api_image }}:latest
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Build & push Dashboard image
+        uses: docker/build-push-action@v5
+        with:
+          context: dashboard
+          file: infra/docker/Dockerfile.dashboard
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.dashboard_image }}:${{ steps.meta.outputs.sha_tag }}
+            ${{ steps.meta.outputs.dashboard_image }}:latest
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  # ── Deploy to staging ──────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy → Staging
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false   # never cancel an in-flight deploy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig (staging)
+        run: echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > /tmp/kubeconfig
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Run database migrations
+        run: |
+          kubectl run spb-migrate --rm -i --restart=Never \
+            --image=ghcr.io/${{ env.IMAGE_OWNER }}/spb-api:${{ needs.build.outputs.sha_tag }} \
+            --namespace=spb \
+            --env-from=configmap/spb-config-staging \
+            --env-from=secret/spb-secrets \
+            -- uv run python -m api.migrate
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Rolling update — API (staging)
+        run: |
+          kubectl set image deployment/spb-api api=ghcr.io/${{ env.IMAGE_OWNER }}/spb-api:${{ needs.build.outputs.sha_tag }} \
+            -n spb
+          kubectl rollout status deployment/spb-api -n spb --timeout=300s
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Rolling update — Worker (staging)
+        run: |
+          kubectl set image deployment/spb-worker worker=ghcr.io/${{ env.IMAGE_OWNER }}/spb-api:${{ needs.build.outputs.sha_tag }} \
+            -n spb
+          kubectl rollout status deployment/spb-worker -n spb --timeout=300s
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Rolling update — Dashboard (staging)
+        run: |
+          kubectl set image deployment/spb-dashboard dashboard=ghcr.io/${{ env.IMAGE_OWNER }}/spb-dashboard:${{ needs.build.outputs.sha_tag }} \
+            -n spb
+          kubectl rollout status deployment/spb-dashboard -n spb --timeout=120s
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Smoke test staging
+        run: |
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api-staging.syntheticpersonasandbox.com/health)
+          [ "$STATUS" = "200" ] || (echo "Staging health check failed: $STATUS" && exit 1)
+
+  # ── Integration tests on staging ──────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests (staging)
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run regression tests against staging
+        env:
+          API_BASE_URL: https://api-staging.syntheticpersonasandbox.com
+          STAGING_TOKEN: ${{ secrets.STAGING_TEST_TOKEN }}
+        run: uv run pytest tests/integration/ -v --tb=short -m "not slow"
+
+  # ── Deploy to production (tags only) ──────────────────────────────────────
+  deploy-production:
+    name: Deploy → Production
+    needs: [build, integration-tests]
+    runs-on: ubuntu-latest
+    environment: production       # requires manual approval in GitHub
+    if: startsWith(github.ref, 'refs/tags/v')
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig (production)
+        run: echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > /tmp/kubeconfig
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Run database migrations
+        run: |
+          kubectl run spb-migrate --rm -i --restart=Never \
+            --image=ghcr.io/${{ env.IMAGE_OWNER }}/spb-api:${{ needs.build.outputs.sha_tag }} \
+            --namespace=spb \
+            --env-from=configmap/spb-config \
+            --env-from=secret/spb-secrets \
+            -- uv run python -m api.migrate
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      # Blue/green: update the inactive slot, then flip the Service selector
+      - name: Determine active slot
+        id: slot
+        run: |
+          ACTIVE=$(kubectl get deployment spb-api -n spb -o jsonpath='{.metadata.labels.slot}')
+          INACTIVE=$([ "$ACTIVE" = "blue" ] && echo "green" || echo "blue")
+          echo "active=${ACTIVE}" >> $GITHUB_OUTPUT
+          echo "inactive=${INACTIVE}" >> $GITHUB_OUTPUT
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Update inactive slot image
+        run: |
+          kubectl set image deployment/spb-api api=ghcr.io/${{ env.IMAGE_OWNER }}/spb-api:${{ needs.build.outputs.sha_tag }} \
+            -n spb
+          kubectl rollout status deployment/spb-api -n spb --timeout=300s
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Health check on new pods
+        run: |
+          sleep 10
+          READY=$(kubectl get deployment spb-api -n spb -o jsonpath='{.status.readyReplicas}')
+          DESIRED=$(kubectl get deployment spb-api -n spb -o jsonpath='{.spec.replicas}')
+          [ "$READY" = "$DESIRED" ] || (echo "Not all pods ready: $READY/$DESIRED" && exit 1)
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Update label to new slot
+        run: |
+          kubectl label deployment spb-api slot=${{ steps.slot.outputs.inactive }} \
+            -n spb --overwrite
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Deploy Worker & Dashboard
+        run: |
+          kubectl set image deployment/spb-worker worker=ghcr.io/${{ env.IMAGE_OWNER }}/spb-api:${{ needs.build.outputs.sha_tag }} -n spb
+          kubectl rollout status deployment/spb-worker -n spb --timeout=300s
+          kubectl set image deployment/spb-dashboard dashboard=ghcr.io/${{ env.IMAGE_OWNER }}/spb-dashboard:${{ needs.build.outputs.sha_tag }} -n spb
+          kubectl rollout status deployment/spb-dashboard -n spb --timeout=120s
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Production smoke test
+        run: |
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.syntheticpersonasandbox.com/health)
+          [ "$STATUS" = "200" ] || (echo "Production health check failed: $STATUS" && exit 1)
+
+  # ── Rollback on production failure ────────────────────────────────────────
+  rollback-production:
+    name: Rollback → Production
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    if: failure()
+    environment: production
+
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > /tmp/kubeconfig
+        env:
+          KUBECONFIG: /tmp/kubeconfig
+
+      - name: Rollback all deployments
+        run: |
+          kubectl rollout undo deployment/spb-api -n spb
+          kubectl rollout undo deployment/spb-worker -n spb
+          kubectl rollout undo deployment/spb-dashboard -n spb
+          kubectl rollout status deployment/spb-api -n spb --timeout=120s
+        env:
+          KUBECONFIG: /tmp/kubeconfig

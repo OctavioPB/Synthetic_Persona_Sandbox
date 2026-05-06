@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spb-config
+  namespace: spb
+data:
+  # Application
+  ENV: "production"
+  LOG_LEVEL: "INFO"
+  AUTH_MODE: "production"
+  AUTH_REQUIRED: "true"
+
+  # Database
+  POSTGRES_HOST: "postgres.spb.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "synthetic_persona"
+  POSTGRES_USER: "spb_user"
+
+  # Redis
+  REDIS_HOST: "redis.spb.svc.cluster.local"
+  REDIS_PORT: "6379"
+
+  # Kafka
+  KAFKA_BOOTSTRAP_SERVERS: "kafka.spb.svc.cluster.local:9092"
+
+  # Qdrant
+  QDRANT_HOST: "qdrant.spb.svc.cluster.local"
+  QDRANT_PORT: "6333"
+
+  # Simulation
+  SIMULATION_MAX_CONCURRENT: "5"
+  RATE_LIMIT_PER_MINUTE: "10"
+
+  # Observability
+  PROMETHEUS_MULTIPROC_DIR: "/tmp/prometheus"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spb-config-staging
+  namespace: spb
+data:
+  ENV: "staging"
+  LOG_LEVEL: "DEBUG"
+  AUTH_MODE: "dev"
+  AUTH_REQUIRED: "false"
+  POSTGRES_HOST: "postgres-staging.spb.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "synthetic_persona_staging"
+  POSTGRES_USER: "spb_user"
+  REDIS_HOST: "redis-staging.spb.svc.cluster.local"
+  REDIS_PORT: "6379"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-staging.spb.svc.cluster.local:9092"
+  QDRANT_HOST: "qdrant-staging.spb.svc.cluster.local"
+  QDRANT_PORT: "6333"
+  SIMULATION_MAX_CONCURRENT: "2"
+  RATE_LIMIT_PER_MINUTE: "20"

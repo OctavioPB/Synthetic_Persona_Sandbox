@@ -1,0 +1,148 @@
+# Daily PostgreSQL backup → S3-compatible object storage (S10-05)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: spb-pg-backup
+  namespace: spb
+  labels:
+    app: spb-pg-backup
+spec:
+  schedule: "0 2 * * *"     # 02:00 UTC daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600   # fail if backup takes > 1 hour
+      template:
+        metadata:
+          labels:
+            app: spb-pg-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: pg-backup
+              image: postgres:16-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -euo pipefail
+                  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                  DUMP_FILE="/tmp/spb_backup_${TIMESTAMP}.sql.gz"
+
+                  echo "Starting backup: ${DUMP_FILE}"
+                  PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump \
+                    -h "${POSTGRES_HOST}" \
+                    -U "${POSTGRES_USER}" \
+                    -d "${POSTGRES_DB}" \
+                    --no-owner \
+                    --no-acl \
+                    | gzip > "${DUMP_FILE}"
+
+                  # Upload to S3-compatible storage
+                  aws s3 cp "${DUMP_FILE}" \
+                    "s3://${BACKUP_BUCKET}/postgres/$(date +%Y/%m/%d)/$(basename ${DUMP_FILE})" \
+                    --storage-class STANDARD_IA
+
+                  # Prune backups older than 90 days
+                  aws s3 ls "s3://${BACKUP_BUCKET}/postgres/" --recursive \
+                    | awk '{print $4}' \
+                    | while read KEY; do
+                        DATE=$(echo "$KEY" | grep -oP '\d{4}/\d{2}/\d{2}' | tr -d '/')
+                        if [ "$(date -d "${DATE}" +%s 2>/dev/null || echo 0)" -lt "$(date -d '90 days ago' +%s)" ]; then
+                          aws s3 rm "s3://${BACKUP_BUCKET}/${KEY}"
+                        fi
+                      done
+
+                  echo "Backup complete: $(du -sh ${DUMP_FILE} | cut -f1)"
+              envFrom:
+                - configMapRef:
+                    name: spb-config
+                - secretRef:
+                    name: spb-secrets
+              env:
+                - name: BACKUP_BUCKET
+                  value: "spb-backups-prod"
+                - name: AWS_DEFAULT_REGION
+                  value: "us-east-1"
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 5Gi
+---
+# Restore job template — instantiate manually with kubectl apply when needed.
+# Replace RESTORE_FROM_KEY with the S3 key of the backup to restore.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spb-pg-restore-YYYYMMDD    # rename before applying
+  namespace: spb
+  labels:
+    app: spb-pg-restore
+spec:
+  backoffLimit: 0     # never auto-retry a restore — human must verify first
+  template:
+    metadata:
+      labels:
+        app: spb-pg-restore
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pg-restore
+          image: postgres:16-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -euo pipefail
+              RESTORE_KEY="${RESTORE_FROM_KEY}"
+
+              echo "Downloading backup: ${RESTORE_KEY}"
+              aws s3 cp "s3://${BACKUP_BUCKET}/${RESTORE_KEY}" /tmp/restore.sql.gz
+
+              echo "Restoring to ${POSTGRES_DB}..."
+              gunzip -c /tmp/restore.sql.gz \
+                | PGPASSWORD="${POSTGRES_PASSWORD}" psql \
+                    -h "${POSTGRES_HOST}" \
+                    -U "${POSTGRES_USER}" \
+                    -d "${POSTGRES_DB}"
+
+              echo "Restore complete."
+          envFrom:
+            - configMapRef:
+                name: spb-config
+            - secretRef:
+                name: spb-secrets
+          env:
+            - name: BACKUP_BUCKET
+              value: "spb-backups-prod"
+            - name: RESTORE_FROM_KEY
+              value: "REPLACE_WITH_S3_KEY"  # e.g. postgres/2026/05/06/spb_backup_20260506_020000.sql.gz
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 10Gi

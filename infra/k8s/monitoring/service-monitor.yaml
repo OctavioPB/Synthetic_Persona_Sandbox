@@ -1,0 +1,18 @@
+# ServiceMonitor tells the Prometheus Operator to scrape spb-api pods.
+# Requires: kube-prometheus-stack installed in the cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: spb-api-monitor
+  namespace: spb
+  labels:
+    release: kube-prometheus-stack   # matches Prometheus Operator selector
+spec:
+  selector:
+    matchLabels:
+      app: spb-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

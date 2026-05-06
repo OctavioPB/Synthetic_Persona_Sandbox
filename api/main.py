@@ -12,11 +12,36 @@ from api.services.queue import close_arq_pool, get_arq_pool
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Synthetic Persona Sandbox",
-    description="AI-powered marketing simulation with synthetic customer personas.",
-    version="0.4.0",
+    title="Synthetic Persona Sandbox API",
+    description=(
+        "AI-powered marketing simulation platform. Create synthetic digital twins of customer "
+        "segments and test campaigns before spending on real ads.\n\n"
+        "**Authentication:** Bearer JWT or `X-API-Key` header. "
+        "Set `AUTH_REQUIRED=true` in production.\n\n"
+        "**Interactive docs:** `/docs` (Swagger) · `/redoc` (ReDoc)\n\n"
+        "**Full API reference:** [docs/api/README.md]"
+        "(https://github.com/opb/synthetic-persona-sandbox/blob/main/docs/api/README.md)"
+    ),
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    contact={
+        "name": "OPB AI Mastery Lab",
+        "url": "https://github.com/opb/synthetic-persona-sandbox",
+    },
+    license_info={
+        "name": "MIT",
+    },
+    openapi_tags=[
+        {"name": "health",      "description": "Service liveness and readiness."},
+        {"name": "auth",        "description": "JWT issuance and API key management."},
+        {"name": "org",         "description": "Organization management, members, and audit log."},
+        {"name": "segments",    "description": "Customer segment CRUD."},
+        {"name": "simulations", "description": "Simulation run lifecycle (async + sync)."},
+        {"name": "campaigns",   "description": "Campaign and ad variant management."},
+        {"name": "profiles",    "description": "Real-time user profile state (Kafka-backed)."},
+        {"name": "ws",          "description": "WebSocket — live simulation progress stream."},
+    ],
 )
 
 app.add_middleware(
@@ -97,5 +122,7 @@ async def on_startup() -> None:
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
+    from api.services.cache import close_redis
     await close_arq_pool()
+    await close_redis()
     logger.info("Synthetic Persona Sandbox API shutting down.")

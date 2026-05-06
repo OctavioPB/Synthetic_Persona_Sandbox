@@ -1,0 +1,62 @@
+# Loki log aggregation configuration for SPB pods (S10-03)
+# Applied via the Loki Helm chart values or as a ConfigMap for the promtail sidecar.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spb-loki-config
+  namespace: spb
+data:
+  promtail-config.yaml: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+
+    clients:
+      - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+
+    scrape_configs:
+      - job_name: spb-api
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [spb]
+        pipeline_stages:
+          - docker: {}
+          - match:
+              selector: '{app="spb-api"}'
+              stages:
+                - regex:
+                    expression: '(?P<level>DEBUG|INFO|WARNING|ERROR|CRITICAL)'
+                - labels:
+                    level:
+                - json:
+                    expressions:
+                      org_id: org_id
+                      action:  action
+                      run_id:  run_id
+                - labels:
+                    org_id:
+                    action:
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+
+      - job_name: spb-worker
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [spb]
+        pipeline_stages:
+          - docker: {}
+          - match:
+              selector: '{app="spb-worker"}'
+              stages:
+                - regex:
+                    expression: '(?P<level>DEBUG|INFO|WARNING|ERROR|CRITICAL)'
+                - labels:
+                    level:
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
