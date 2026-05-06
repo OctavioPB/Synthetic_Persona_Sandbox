@@ -4,7 +4,7 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import health, profiles, segments
+from api.routers import health, profiles, segments, simulations
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(profiles.router)
 app.include_router(segments.router)
+app.include_router(simulations.router)
 
 
 @app.on_event("startup")
