@@ -1,8 +1,9 @@
-"""Simulations API — Sprint 4.
+"""Simulations API — Sprint 4 (inline) → Sprint 6 (ARQ-queued).
 
-POST /simulate/run  — run a persona simulation for a segment + stimulus
-GET  /simulate/runs — list simulation runs (paginated)
-GET  /simulate/runs/{run_id} — get a single run by ID
+POST /simulate/run        — enqueue async simulation job (202 Accepted)
+POST /simulate/run/sync   — inline synchronous run (for testing / CI)
+GET  /simulate/runs       — list simulation runs (paginated, with filters)
+GET  /simulate/runs/{id}  — get a single run by ID
 """
 
 from __future__ import annotations
@@ -24,6 +25,9 @@ from api.models.simulation import (
     SimulationRunResponse,
 )
 from api.services.db import get_db
+from api.services.metrics import QUEUE_DEPTH, SIMULATION_TOTAL
+from api.services.queue import QueueDep
+from api.services.rate_limiter import RateLimitDep
 from ml.synthetic_data.conversion_scorer import ConversionScorer
 from ml.synthetic_data.persona_inference import PersonaInferenceService
 from ml.synthetic_data.stimulus_schema import (
@@ -38,6 +42,7 @@ router = APIRouter(prefix="/simulate", tags=["simulations"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
+# Module-level singletons used by the sync endpoint
 _inference_service = PersonaInferenceService()
 _scorer            = ConversionScorer()
 
@@ -45,27 +50,83 @@ _scorer            = ConversionScorer()
 def _parse_stimulus(
     data: dict[str, Any],
 ) -> AdCopyStimulus | PriceChangeStimulus | PromoStimulus:
-    """Deserialize a raw stimulus dict into the correct model.
-
-    Uses Pydantic's discriminated union via the 'type' field.
-    """
+    """Deserialize a raw stimulus dict via the discriminated union."""
     from pydantic import TypeAdapter
     adapter: TypeAdapter[AnyStimulus] = TypeAdapter(AnyStimulus)  # type: ignore[arg-type]
     try:
         return adapter.validate_python(data)
     except Exception as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Invalid stimulus payload: {exc}",
-        ) from exc
+        raise HTTPException(status_code=422, detail=f"Invalid stimulus payload: {exc}") from exc
 
 
-@router.post("/run", response_model=SimulationRunResponse, status_code=201)
-async def run_simulation(body: SimulateRunRequest, db: DbDep) -> SimulationRunResponse:
-    """Run a synthetic persona simulation for a segment against a marketing stimulus.
+# ── Async (queued) endpoint — primary path ─────────────────────────────────────
 
-    Fetches segment metadata from PostgreSQL, calls Claude via PersonaInferenceService,
-    scores the response, and persists the full result to `simulation_runs`.
+@router.post("/run", response_model=SimulationRunResponse, status_code=202)
+async def run_simulation_async(
+    body: SimulateRunRequest,
+    db: DbDep,
+    queue: QueueDep,
+    _: RateLimitDep,
+) -> SimulationRunResponse:
+    """Enqueue a simulation job.
+
+    Returns 202 Accepted with status='pending'. The ARQ worker processes
+    the job and updates the run. Poll status via GET /simulate/runs/{id}
+    or stream progress via WebSocket /ws/simulations/{id}.
+    """
+    try:
+        segment_uid = uuid.UUID(body.segment_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid segment_id format") from exc
+
+    seg_result = await db.execute(select(SegmentORM).where(SegmentORM.id == segment_uid))
+    segment = seg_result.scalar_one_or_none()
+    if segment is None:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    # Validate stimulus before enqueuing — fail fast before touching the queue
+    stimulus = _parse_stimulus(body.stimulus)
+
+    run = SimulationRunORM(
+        segment_id=segment_uid,
+        stimulus=stimulus.model_dump(mode="json"),
+        status="pending",
+        model_id=body.model,
+    )
+    db.add(run)
+    await db.flush()
+    await db.refresh(run)
+
+    await queue.enqueue_job(
+        "run_simulation_job",
+        run_id=str(run.id),
+        segment_id=str(segment_uid),
+        segment_name=segment.name,
+        definition=segment.definition,
+        stimulus=stimulus.model_dump(mode="json"),
+        temperature=body.temperature,
+        model=body.model,
+        _job_id=str(run.id),         # idempotency: job_id == run_id
+    )
+
+    QUEUE_DEPTH.inc()
+    SIMULATION_TOTAL.labels(stimulus_type=stimulus.type).inc()
+
+    logger.info(
+        "Enqueued simulation run %s for segment '%s' (stimulus=%s).",
+        run.id, segment.name, stimulus.type,
+    )
+    return SimulationRunResponse.from_orm(run)
+
+
+# ── Sync endpoint — used by integration tests and the Airflow DAG ─────────────
+
+@router.post("/run/sync", response_model=SimulationRunResponse, status_code=201)
+async def run_simulation_sync(body: SimulateRunRequest, db: DbDep) -> SimulationRunResponse:
+    """Run a simulation synchronously (blocking).
+
+    Intended for CI, integration tests, and the Airflow DAG.
+    Does not apply rate limiting or ARQ queuing.
     """
     try:
         segment_uid = uuid.UUID(body.segment_id)
@@ -100,47 +161,49 @@ async def run_simulation(body: SimulateRunRequest, db: DbDep) -> SimulationRunRe
         )
         conversion_score = _scorer.score(response)
 
-        run.verbatim_response      = response.verbatim_response
-        run.sentiment              = response.sentiment
-        run.likelihood_to_convert  = response.likelihood_to_convert
-        run.conversion_score       = conversion_score
+        run.verbatim_response     = response.verbatim_response
+        run.sentiment             = response.sentiment
+        run.likelihood_to_convert = response.likelihood_to_convert
+        run.conversion_score      = conversion_score
         run.llm_metadata = {
-            "key_factors":    response.key_factors,
-            "input_tokens":   response.input_tokens,
-            "output_tokens":  response.output_tokens,
-            "latency_ms":     response.latency_ms,
+            "key_factors":   response.key_factors,
+            "input_tokens":  response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "latency_ms":    response.latency_ms,
         }
         run.status       = "completed"
         run.completed_at = datetime.now(timezone.utc)
 
     except Exception as exc:
-        run.status      = "failed"
+        run.status       = "failed"
         run.llm_metadata = {"error": str(exc)}
         run.completed_at = datetime.now(timezone.utc)
         await db.flush()
-        logger.error("Simulation run %s failed: %s", run.id, exc)
+        logger.error("Sync simulation run %s failed: %s", run.id, exc)
         raise HTTPException(status_code=502, detail=f"Persona inference failed: {exc}") from exc
 
     await db.flush()
     await db.refresh(run)
     logger.info(
-        "Simulation run %s completed: segment=%s sentiment=%s score=%.3f",
-        run.id, segment.name, run.sentiment, run.conversion_score or 0.0,
+        "Sync run %s completed: segment=%s score=%.3f",
+        run.id, segment.name, run.conversion_score or 0.0,
     )
     return SimulationRunResponse.from_orm(run)
 
 
+# ── Read endpoints ─────────────────────────────────────────────────────────────
+
 @router.get("/runs", response_model=SimulationRunListResponse)
 async def list_runs(
     db: DbDep,
-    segment_id: str | None = Query(default=None, description="Filter by segment UUID."),
+    segment_id: str | None = Query(default=None),
+    status: str | None     = Query(default=None, description="Filter by status."),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
 ) -> SimulationRunListResponse:
-    """List simulation runs, optionally filtered by segment."""
-    offset = (page - 1) * size
-
-    base_query = select(SimulationRunORM)
+    """List simulation runs with optional filters."""
+    offset      = (page - 1) * size
+    base_query  = select(SimulationRunORM)
     count_query = select(func.count()).select_from(SimulationRunORM)
 
     if segment_id is not None:
@@ -151,19 +214,16 @@ async def list_runs(
         base_query  = base_query.where(SimulationRunORM.segment_id == seg_uid)
         count_query = count_query.where(SimulationRunORM.segment_id == seg_uid)
 
-    total_result = await db.execute(count_query)
-    total: int = total_result.scalar_one()
+    if status is not None:
+        base_query  = base_query.where(SimulationRunORM.status == status)
+        count_query = count_query.where(SimulationRunORM.status == status)
 
+    total: int = (await db.execute(count_query)).scalar_one()
     rows = await db.execute(
-        base_query
-        .order_by(SimulationRunORM.created_at.desc())
-        .offset(offset)
-        .limit(size)
+        base_query.order_by(SimulationRunORM.created_at.desc()).offset(offset).limit(size)
     )
-    runs = rows.scalars().all()
-
     return SimulationRunListResponse(
-        items=[SimulationRunResponse.from_orm(r) for r in runs],
+        items=[SimulationRunResponse.from_orm(r) for r in rows.scalars().all()],
         total=total,
         page=page,
         size=size,

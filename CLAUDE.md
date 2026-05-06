@@ -206,7 +206,7 @@ Sprint 2 — Kafka Ingestion Pipeline            [x] Completado (2026-05-05)
 Sprint 3 — Segment Modeling & Data Preparation [x] Completado (2026-05-05)
 Sprint 4 — Synthetic Persona Generation        [x] Completado (2026-05-05)
 Sprint 5 — Airflow Orchestration               [x] Completado (2026-05-05)
-Sprint 6 — Real-Time Simulation Engine Polish  [ ] Pendiente
+Sprint 6 — Real-Time Simulation Engine Polish  [x] Completado (2026-05-06)
 Sprint 7 — Dashboard Core: Campaign Launcher   [ ] Pendiente
 Sprint 8 — Dashboard: Analytics & Persona Exp  [ ] Pendiente
 Sprint 9 — Security, Auth & Multi-Tenancy      [ ] Pendiente

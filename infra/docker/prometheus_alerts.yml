@@ -1,0 +1,84 @@
+groups:
+  - name: simulation_alerts
+    interval: 60s
+    rules:
+
+      # S6-05: Simulation failure rate > 5% → critical alert
+      - alert: SimulationHighFailureRate
+        expr: |
+          rate(spb_simulation_errors_total[5m])
+          /
+          (rate(spb_simulation_requests_total[5m]) + 0.0001)
+          > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Simulation failure rate exceeds 5%"
+          description: >
+            {{ $value | humanizePercentage }} of simulation requests are failing
+            over the last 5 minutes. Investigate Claude API errors or worker crashes.
+            Check: uv run arq api.workers.simulation_worker.WorkerSettings
+
+      # Queue depth > 50 pending jobs for more than 5 minutes
+      - alert: SimulationQueueDepthHigh
+        expr: spb_simulation_queue_depth > 50
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Simulation queue depth is high"
+          description: >
+            {{ $value }} jobs are pending in the simulation queue.
+            Consider scaling the ARQ worker (increase max_jobs or add worker replicas).
+
+      # p95 simulation latency > 30 seconds
+      - alert: SimulationLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(spb_simulation_latency_seconds_bucket[10m])
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Simulation p95 latency exceeds 30 seconds"
+          description: >
+            95th percentile simulation job latency is {{ $value | humanizeDuration }}.
+            Expected p95 < 10s (Sprint 6 SLO). Check Claude API response times.
+
+      # API p99 latency > 2 seconds on simulation endpoints
+      - alert: SimulationAPILatencyHigh
+        expr: |
+          histogram_quantile(0.99,
+            rate(spb_api_request_latency_seconds_bucket{path=~"/simulate/.*"}[5m])
+          ) > 2
+        for: 3m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Simulation API p99 latency > 2s"
+          description: >
+            {{ $value | humanizeDuration }} p99 on /simulate/* endpoints.
+            Check DB query performance and ARQ enqueue latency.
+
+      # No simulations completed in the last 15 minutes (dead worker)
+      - alert: SimulationWorkerDead
+        expr: |
+          increase(spb_simulation_requests_total[15m]) > 5
+          and
+          increase(spb_simulation_latency_seconds_count[15m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Simulation worker appears to be dead"
+          description: >
+            New jobs are being enqueued but no jobs are completing.
+            The ARQ worker may have crashed. Restart with:
+            uv run arq api.workers.simulation_worker.WorkerSettings

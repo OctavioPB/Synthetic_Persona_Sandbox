@@ -19,12 +19,33 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+    before_sleep_log,
+)
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL     = "claude-sonnet-4-6"
+DEFAULT_MODEL      = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 1024
 _MIN_CACHE_TOKENS  = 100   # only cache system prompts above this token estimate
+
+# S6-06: Retry up to 3 times on transient API errors with exponential backoff.
+# Caps at 30 seconds between attempts; total max wait ≈ 2 + 8 + 30 = 40s.
+_api_retry = retry(
+    retry=retry_if_exception_type((
+        anthropic.APIConnectionError,
+        anthropic.RateLimitError,
+        anthropic.InternalServerError,
+    )),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
 
 
 class CachedClaudeClient:
@@ -85,12 +106,12 @@ class CachedClaudeClient:
         logger.debug("Cache miss: %s — calling API.", cache_key[:12])
         t0 = time.monotonic()
 
-        response = self._client.messages.create(
+        response = self._call_api_with_retry(
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
-            system=system_blocks,
-            messages=[{"role": "user", "content": user_message}],
+            system_blocks=system_blocks,
+            user_message=user_message,
         )
 
         latency_ms  = (time.monotonic() - t0) * 1000
@@ -109,6 +130,28 @@ class CachedClaudeClient:
         return result
 
     # ── Helpers ────────────────────────────────────────────────────────────────
+
+    def _call_api_with_retry(
+        self,
+        model: str,
+        max_tokens: int,
+        temperature: float,
+        system_blocks: list[dict[str, Any]],
+        user_message: str,
+    ) -> Any:
+        """Wrap the SDK call with tenacity exponential-backoff retry (S6-06)."""
+
+        @_api_retry
+        def _call() -> Any:
+            return self._client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_blocks,
+                messages=[{"role": "user", "content": user_message}],
+            )
+
+        return _call()
 
     def _normalize_system(
         self, system: str | list[dict[str, Any]]
