@@ -5,15 +5,25 @@ import DashboardPage from './pages/DashboardPage'
 import SegmentsPage from './pages/SegmentsPage'
 import SegmentBuilderPage from './pages/SegmentBuilderPage'
 import SegmentDetailPage from './pages/SegmentDetailPage'
+import CampaignLauncherPage from './pages/CampaignLauncherPage'
+import SimulationResultsPage from './pages/SimulationResultsPage'
+import { useCampaignStore } from './store/campaignStore'
 import { Segment } from './components/SegmentCard'
 
-export type Page = 'dashboard' | 'segments' | 'segment-builder' | 'segment-detail'
+export type Page =
+  | 'dashboard'
+  | 'segments'
+  | 'segment-builder'
+  | 'segment-detail'
+  | 'campaign-launcher'
+  | 'simulation-results'
 
 export default function App(): React.JSX.Element {
   const [page, setPage]               = useState<Page>('dashboard')
   const [activeSegment, setActiveSegment] = useState<Segment | null>(null)
 
-  // All hooks must be called before any conditional render.
+  const { resetForm } = useCampaignStore()
+
   const renderPage = (): React.JSX.Element => {
     switch (page) {
       case 'dashboard':
@@ -24,7 +34,6 @@ export default function App(): React.JSX.Element {
           <SegmentsPage
             onCreateNew={() => setPage('segment-builder')}
             onViewDetail={(id) => {
-              // In Sprint 6 this will fetch from the API; for now use stub
               const stub: Segment = {
                 id,
                 name: 'Gen Z — Madrid',
@@ -59,6 +68,25 @@ export default function App(): React.JSX.Element {
           <SegmentDetailPage
             segment={activeSegment}
             onBack={() => setPage('segments')}
+          />
+        )
+
+      case 'campaign-launcher':
+        return (
+          <CampaignLauncherPage
+            onLaunchComplete={() => setPage('simulation-results')}
+            onCancel={() => setPage('dashboard')}
+          />
+        )
+
+      case 'simulation-results':
+        return (
+          <SimulationResultsPage
+            onLaunchAnother={() => {
+              resetForm()
+              setPage('campaign-launcher')
+            }}
+            onViewSegments={() => setPage('segments')}
           />
         )
     }

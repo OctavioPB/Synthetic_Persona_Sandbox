@@ -24,12 +24,90 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return response.json() as Promise<T>
 }
 
+// ── Domain types ──────────────────────────────────────────────────────────────
+
 export interface HealthResponse {
   status: string
   version: string
   timestamp: number
 }
 
+export interface SegmentSummary {
+  id: string
+  name: string
+  description: string
+  is_stale: boolean
+  last_trained_at: string | null
+  created_at: string
+}
+
+export interface CampaignResponse {
+  id: string
+  name: string
+  description: string
+  segment_id: string
+  status: string
+  created_at: string
+}
+
+export interface VariantResponse {
+  id: string
+  campaign_id: string
+  name: string
+  stimulus: Record<string, unknown>
+  rank: number | null
+  score: number | null
+  run_id: string | null
+}
+
+export interface SimulationRunResponse {
+  id: string
+  segment_id: string
+  status: string
+  stimulus_type: string
+  verbatim_response: string | null
+  sentiment: string | null
+  likelihood_to_convert: number | null
+  conversion_score: number | null
+  error_code: string | null
+  error_detail: string | null
+  latency_ms: number | null
+  model_id: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+// ── API surface ───────────────────────────────────────────────────────────────
+
 export const api = {
-  health: (): Promise<HealthResponse> => request<HealthResponse>('/health'),
+  health: (): Promise<HealthResponse> =>
+    request<HealthResponse>('/health'),
+
+  segments: {
+    list: (): Promise<SegmentSummary[]> =>
+      request<SegmentSummary[]>('/segments'),
+  },
+
+  campaigns: {
+    create: (body: { name: string; description: string; segment_id: string }): Promise<CampaignResponse> =>
+      request<CampaignResponse>('/campaigns', { method: 'POST', body }),
+
+    createVariant: (
+      campaignId: string,
+      body: { name: string; stimulus: Record<string, unknown> },
+    ): Promise<VariantResponse> =>
+      request<VariantResponse>(`/campaigns/${campaignId}/variants`, { method: 'POST', body }),
+  },
+
+  simulations: {
+    run: (body: {
+      segment_id: string
+      stimulus: Record<string, unknown>
+      temperature?: number
+    }): Promise<SimulationRunResponse> =>
+      request<SimulationRunResponse>('/simulate/run', { method: 'POST', body }),
+
+    get: (runId: string): Promise<SimulationRunResponse> =>
+      request<SimulationRunResponse>(`/simulate/runs/${runId}`),
+  },
 }

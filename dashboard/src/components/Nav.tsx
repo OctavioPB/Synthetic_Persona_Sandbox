@@ -48,8 +48,9 @@ const navLinkActive: React.CSSProperties = {
 }
 
 const pages: Array<{ id: Page; label: string }> = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'segments',  label: 'Segments'  },
+  { id: 'dashboard',          label: 'Dashboard'  },
+  { id: 'segments',           label: 'Segments'   },
+  { id: 'campaign-launcher',  label: 'Campaigns'  },
 ]
 
 export default function Nav({ currentPage, onNavigate }: NavProps): React.JSX.Element {
