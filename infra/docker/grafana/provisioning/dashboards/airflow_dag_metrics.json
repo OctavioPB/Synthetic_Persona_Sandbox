@@ -1,0 +1,202 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.4.3" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "table", "name": "Table", "version": "" }
+  ],
+  "annotations": { "list": [] },
+  "description": "Airflow DAG monitoring — duration, failure rate, simulation throughput",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.02 },
+              { "color": "red", "value": 0.05 }
+            ]
+          },
+          "unit": "percentunit",
+          "mappings": []
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "title": "DAG Failure Rate (5m)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(airflow_dag_task_failed_total[5m]) / (rate(airflow_dag_task_success_total[5m]) + rate(airflow_dag_task_failed_total[5m]) + 0.0001)",
+          "legendFormat": "Failure rate",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "title": "Simulations Completed (1h)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "increase(airflow_dag_task_success_total{dag_id=\"run_simulation_pipeline\"}[1h])",
+          "legendFormat": "Completed",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "s" }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": { "reduceOptions": { "calcs": ["mean"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "title": "Avg Simulation Duration",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "avg(airflow_dag_run_duration{dag_id=\"run_simulation_pipeline\"})",
+          "legendFormat": "Avg duration",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
+      "title": "Variant Competitions (1h)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "increase(airflow_dag_task_success_total{dag_id=\"variant_competition\"}[1h])",
+          "legendFormat": "Competitions",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "title": "DAG Run Duration Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "airflow_dag_run_duration{dag_id=~\"run_simulation_pipeline|variant_competition|extract_segment_data\"}",
+          "legendFormat": "{{ dag_id }}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 6,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "title": "Task Success / Failure Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(airflow_dag_task_success_total{dag_id=~\"run_simulation_pipeline|variant_competition\"}[5m])",
+          "legendFormat": "success: {{ dag_id }}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(airflow_dag_task_failed_total{dag_id=~\"run_simulation_pipeline|variant_competition\"}[5m])",
+          "legendFormat": "failed: {{ dag_id }}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" }, "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Duration (s)" }, "properties": [{ "id": "unit", "value": "s" }] },
+          { "matcher": { "id": "byName", "options": "Failure Rate" }, "properties": [{ "id": "unit", "value": "percentunit" }] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "id": 7,
+      "options": { "showHeader": true },
+      "title": "DAG Summary Table",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "avg by (dag_id) (airflow_dag_run_duration)",
+          "legendFormat": "{{ dag_id }}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": { "valueLabel": "dag_id" } },
+        { "id": "organize", "options": { "renameByName": { "Value": "Avg Duration (s)" } } }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["airflow", "simulation", "sprint-5"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-3h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Airflow DAG Metrics — Synthetic Persona Sandbox",
+  "uid": "spb-airflow-dags",
+  "version": 1
+}

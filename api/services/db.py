@@ -32,3 +32,15 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+def get_async_session() -> AsyncSession:
+    """Return a raw async session for use as an async context manager.
+
+    Use this outside of FastAPI dependency injection (e.g. WebSocket handlers,
+    background tasks, Airflow operators that import the ORM layer).
+
+        async with get_async_session() as db:
+            result = await db.execute(...)
+    """
+    return AsyncSessionLocal()
