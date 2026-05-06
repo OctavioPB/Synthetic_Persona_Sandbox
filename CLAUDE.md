@@ -208,7 +208,7 @@ Sprint 4 — Synthetic Persona Generation        [x] Completado (2026-05-05)
 Sprint 5 — Airflow Orchestration               [x] Completado (2026-05-05)
 Sprint 6 — Real-Time Simulation Engine Polish  [x] Completado (2026-05-06)
 Sprint 7 — Dashboard Core: Campaign Launcher   [x] Completado (2026-05-06)
-Sprint 8 — Dashboard: Analytics & Persona Exp  [ ] Pendiente
+Sprint 8 — Dashboard: Analytics & Persona Exp  [x] Completado (2026-05-06)
 Sprint 9 — Security, Auth & Multi-Tenancy      [ ] Pendiente
 Sprint 10 — Production Hardening & GA Release  [ ] Pendiente
 ```

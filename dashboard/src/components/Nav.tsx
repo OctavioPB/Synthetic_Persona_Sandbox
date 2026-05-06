@@ -1,5 +1,6 @@
 import React from 'react'
 import { type Page } from '../App'
+import { useTheme } from '../hooks/useTheme'
 
 interface NavProps {
   currentPage: Page
@@ -51,9 +52,12 @@ const pages: Array<{ id: Page; label: string }> = [
   { id: 'dashboard',          label: 'Dashboard'  },
   { id: 'segments',           label: 'Segments'   },
   { id: 'campaign-launcher',  label: 'Campaigns'  },
+  { id: 'analytics',          label: 'Analytics'  },
 ]
 
 export default function Nav({ currentPage, onNavigate }: NavProps): React.JSX.Element {
+  const { theme, toggle } = useTheme()
+
   return (
     <nav style={navStyle}>
       {/* OPB Monogram */}
@@ -69,7 +73,7 @@ export default function Nav({ currentPage, onNavigate }: NavProps): React.JSX.El
       {/* App title */}
       <span style={appTitleStyle}>Synthetic Persona Sandbox</span>
 
-      {/* Nav links */}
+      {/* Nav links + theme toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         {pages.map(({ id, label }) => (
           <button
@@ -80,6 +84,24 @@ export default function Nav({ currentPage, onNavigate }: NavProps): React.JSX.El
             {label}
           </button>
         ))}
+        <button
+          onClick={toggle}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          style={{
+            background: 'none',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 6,
+            color: 'rgba(255,255,255,0.5)',
+            cursor: 'pointer',
+            fontFamily: 'var(--fb)',
+            fontSize: 9,
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            padding: '5px 10px',
+          }}
+        >
+          {theme === 'dark' ? '☀ Light' : '◑ Dark'}
+        </button>
       </div>
     </nav>
   )

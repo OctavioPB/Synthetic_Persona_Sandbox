@@ -177,6 +177,46 @@ export default function SegmentDetailPage({ segment, onBack }: SegmentDetailPage
           </div>
         </div>
 
+        {/* Persona Explorer — affinities */}
+        {cats.length > 0 && (
+          <div style={section}>
+            <Eyebrow>Persona Explorer</Eyebrow>
+            <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 22, fontWeight: 300, color: '#0a1628', margin: '0 0 4px' }}>
+              Category affinities
+            </h2>
+            <p style={{ fontFamily: 'var(--fb)', fontSize: 13, color: 'var(--mid)', marginBottom: 24 }}>
+              Ranked by relative strength. Position 1 = highest behavioral affinity for this segment.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {cats.map((cat, i) => {
+                const pct = Math.round(100 - (i / cats.length) * 55)
+                return (
+                  <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ width: 28, fontFamily: "'Fraunces', Georgia, serif", fontSize: 20, fontWeight: 300, color: 'var(--primary-30)', lineHeight: 1, flexShrink: 0, textAlign: 'right' }}>
+                      {i + 1}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontFamily: 'var(--fb)', fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>{cat}</span>
+                        <span style={{ fontFamily: 'var(--fb)', fontSize: 11, color: 'var(--mid)' }}>{pct}%</span>
+                      </div>
+                      <div style={{ height: 6, backgroundColor: 'var(--primary-10)', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${pct}%`,
+                          height: '100%',
+                          backgroundColor: i === 0 ? 'var(--gold)' : 'var(--primary-60)',
+                          borderRadius: 4,
+                          transition: 'width 0.6s ease',
+                        }} />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Embedding status */}
         <div style={{ ...section, borderBottom: 'none' }}>
           <Eyebrow>Persona Embedding</Eyebrow>

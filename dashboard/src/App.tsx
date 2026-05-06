@@ -7,6 +7,7 @@ import SegmentBuilderPage from './pages/SegmentBuilderPage'
 import SegmentDetailPage from './pages/SegmentDetailPage'
 import CampaignLauncherPage from './pages/CampaignLauncherPage'
 import SimulationResultsPage from './pages/SimulationResultsPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 import { useCampaignStore } from './store/campaignStore'
 import { Segment } from './components/SegmentCard'
 
@@ -17,6 +18,7 @@ export type Page =
   | 'segment-detail'
   | 'campaign-launcher'
   | 'simulation-results'
+  | 'analytics'
 
 export default function App(): React.JSX.Element {
   const [page, setPage]               = useState<Page>('dashboard')
@@ -89,6 +91,9 @@ export default function App(): React.JSX.Element {
             onViewSegments={() => setPage('segments')}
           />
         )
+
+      case 'analytics':
+        return <AnalyticsPage />
     }
   }
 

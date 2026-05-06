@@ -69,6 +69,17 @@
   --nav-height: 52px;
 }
 
+/* ── Dark mode overrides ───────────────────────────────────────────────────── */
+html[data-theme="dark"] {
+  --light:      #0f1117;
+  --white:      #1a1d27;
+  --dark:       #e2e8f0;
+  --mid:        #8b9099;
+  --primary-10: rgba(255,255,255,0.07);
+  --shadow-card: 0 1px 4px rgba(0,0,0,0.35);
+  --shadow-soft: 0 1px 6px rgba(0,0,0,0.3);
+}
+
 /* ── Base reset ────────────────────────────────────────────────────────────── */
 *,
 *::before,

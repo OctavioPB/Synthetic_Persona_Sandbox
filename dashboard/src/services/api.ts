@@ -109,5 +109,14 @@ export const api = {
 
     get: (runId: string): Promise<SimulationRunResponse> =>
       request<SimulationRunResponse>(`/simulate/runs/${runId}`),
+
+    list: (params: { segment_id?: string; status?: string; size?: number } = {}): Promise<SimulationRunResponse[]> => {
+      const qs = new URLSearchParams()
+      if (params.segment_id) qs.set('segment_id', params.segment_id)
+      if (params.status)     qs.set('status', params.status)
+      if (params.size)       qs.set('size', String(params.size))
+      const query = qs.toString()
+      return request<SimulationRunResponse[]>(`/simulate/runs${query ? `?${query}` : ''}`)
+    },
   },
 }
