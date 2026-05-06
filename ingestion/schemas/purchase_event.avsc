@@ -1,0 +1,20 @@
+{
+  "type": "record",
+  "name": "PurchaseEvent",
+  "namespace": "com.opb.spb.events",
+  "doc": "A completed purchase transaction.",
+  "fields": [
+    {"name": "event_id",     "type": "string"},
+    {"name": "user_id",      "type": "string", "doc": "Raw user identifier — anonymized before storage"},
+    {"name": "session_id",   "type": "string"},
+    {"name": "timestamp_ms", "type": "long"},
+    {"name": "order_id",     "type": "string"},
+    {"name": "product_id",   "type": "string"},
+    {"name": "product_name", "type": "string"},
+    {"name": "category",     "type": "string"},
+    {"name": "amount",       "type": "double"},
+    {"name": "currency",     "type": "string", "default": "USD"},
+    {"name": "quantity",     "type": "int"},
+    {"name": "email",        "type": "string", "doc": "Raw user email — hashed before storage"}
+  ]
+}

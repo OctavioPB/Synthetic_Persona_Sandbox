@@ -89,6 +89,40 @@ jobs:
           ENV: test
         run: uv run pytest tests/unit/ -v --tb=short
 
+  # ── Avro schema validation (S2-05) ────────────────────────────────────────
+  schema-validation:
+    name: Avro Schemas — Parse & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Validate all .avsc schemas can be parsed by fastavro
+        run: |
+          uv run python -c "
+          import json
+          import fastavro
+          from pathlib import Path
+          schemas = list(Path('ingestion/schemas').glob('*.avsc'))
+          assert schemas, 'No .avsc files found!'
+          for p in schemas:
+              with p.open() as f:
+                  schema = json.load(f)
+              fastavro.parse_schema(schema)
+              print(f'  OK  {p.name}')
+          print(f'All {len(schemas)} schemas valid.')
+          "
+
   # ── Dashboard lint & build ─────────────────────────────────────────────────
   dashboard:
     name: Dashboard — ESLint + Build

@@ -1,0 +1,25 @@
+{
+  "type": "record",
+  "name": "SessionEvent",
+  "namespace": "com.opb.spb.events",
+  "doc": "A session lifecycle event (start or end).",
+  "fields": [
+    {"name": "event_id",          "type": "string"},
+    {"name": "user_id",           "type": "string", "doc": "Raw user identifier — anonymized before storage"},
+    {"name": "session_id",        "type": "string"},
+    {"name": "timestamp_ms",      "type": "long"},
+    {
+      "name": "event_type",
+      "type": {
+        "type": "enum",
+        "name": "SessionEventType",
+        "namespace": "com.opb.spb.events",
+        "symbols": ["SESSION_START", "SESSION_END"]
+      }
+    },
+    {"name": "duration_seconds",  "type": ["null", "int"], "default": null,
+     "doc": "Populated only for SESSION_END"},
+    {"name": "page_count",        "type": ["null", "int"], "default": null,
+     "doc": "Number of pages visited in the session (SESSION_END only)"}
+  ]
+}

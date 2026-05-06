@@ -4,14 +4,14 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import health
+from api.routers import health, profiles
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Synthetic Persona Sandbox",
     description="AI-powered marketing simulation with synthetic customer personas.",
-    version="0.1.0",
+    version="0.2.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -25,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(profiles.router)
 
 
 @app.on_event("startup")

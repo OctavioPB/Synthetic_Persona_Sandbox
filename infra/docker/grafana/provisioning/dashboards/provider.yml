@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: "SPB Dashboards"
+    orgId: 1
+    folder: "Synthetic Persona Sandbox"
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

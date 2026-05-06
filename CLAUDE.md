@@ -202,7 +202,7 @@ When asked to:
 
 ```
 Sprint 1 — Infrastructure & Project Skeleton   [x] Completado (2026-05-05)
-Sprint 2 — Kafka Ingestion Pipeline            [ ] Pendiente
+Sprint 2 — Kafka Ingestion Pipeline            [x] Completado (2026-05-05)
 Sprint 3 — Segment Modeling & Data Preparation [ ] Pendiente
 Sprint 4 — Synthetic Persona Generation        [ ] Pendiente
 Sprint 5 — Airflow Orchestration               [ ] Pendiente

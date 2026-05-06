@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "PageViewEvent",
+  "namespace": "com.opb.spb.events",
+  "doc": "A user page view event captured from the web frontend.",
+  "fields": [
+    {"name": "event_id",     "type": "string", "doc": "UUID v4 of this event"},
+    {"name": "user_id",      "type": "string", "doc": "Raw user identifier — anonymized before storage"},
+    {"name": "session_id",   "type": "string", "doc": "Session UUID"},
+    {"name": "timestamp_ms", "type": "long",   "doc": "Event timestamp in epoch milliseconds"},
+    {"name": "url",          "type": "string", "doc": "Full page URL visited"},
+    {"name": "referrer",     "type": ["null", "string"], "default": null, "doc": "HTTP referrer"},
+    {"name": "category",     "type": ["null", "string"], "default": null, "doc": "Page or product category"},
+    {"name": "user_agent",   "type": "string", "doc": "Browser user-agent string"},
+    {"name": "ip_address",   "type": "string", "doc": "Raw client IP — anonymized to /24 before storage"}
+  ]
+}
