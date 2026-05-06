@@ -1,4 +1,4 @@
-"""Simulations API — Sprint 4 (inline) → Sprint 6 (ARQ-queued).
+"""Simulations API — Sprint 4 (inline) → Sprint 6 (ARQ-queued) → S9-02 (auth).
 
 POST /simulate/run        — enqueue async simulation job (202 Accepted)
 POST /simulate/run/sync   — inline synchronous run (for testing / CI)
@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.auth.dependencies import CurrentUser, require
+from api.auth.rbac import Permission
 from api.models.segment import SegmentORM
 from api.models.simulation import (
     SimulateRunRequest,
@@ -42,7 +44,6 @@ router = APIRouter(prefix="/simulate", tags=["simulations"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
-# Module-level singletons used by the sync endpoint
 _inference_service = PersonaInferenceService()
 _scorer            = ConversionScorer()
 
@@ -63,31 +64,39 @@ def _parse_stimulus(
 
 @router.post("/run", response_model=SimulationRunResponse, status_code=202)
 async def run_simulation_async(
-    body: SimulateRunRequest,
-    db: DbDep,
-    queue: QueueDep,
-    _: RateLimitDep,
+    body:   SimulateRunRequest,
+    claims: Annotated[object, Depends(require(Permission.SIMULATIONS_RUN))],
+    db:     DbDep,
+    queue:  QueueDep,
+    _:      RateLimitDep,
 ) -> SimulationRunResponse:
     """Enqueue a simulation job.
 
-    Returns 202 Accepted with status='pending'. The ARQ worker processes
-    the job and updates the run. Poll status via GET /simulate/runs/{id}
+    Returns 202 Accepted with status='pending'. Poll via GET /simulate/runs/{id}
     or stream progress via WebSocket /ws/simulations/{id}.
     """
+    from api.auth.jwt_handler import TokenClaims
+    claims_typed: TokenClaims = claims  # type: ignore[assignment]
+
     try:
         segment_uid = uuid.UUID(body.segment_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid segment_id format") from exc
 
-    seg_result = await db.execute(select(SegmentORM).where(SegmentORM.id == segment_uid))
+    seg_result = await db.execute(
+        select(SegmentORM).where(
+            SegmentORM.id == segment_uid,
+            SegmentORM.org_id == claims_typed.org_id,
+        )
+    )
     segment = seg_result.scalar_one_or_none()
     if segment is None:
         raise HTTPException(status_code=404, detail="Segment not found")
 
-    # Validate stimulus before enqueuing — fail fast before touching the queue
     stimulus = _parse_stimulus(body.stimulus)
 
     run = SimulationRunORM(
+        org_id=claims_typed.org_id,
         segment_id=segment_uid,
         stimulus=stimulus.model_dump(mode="json"),
         status="pending",
@@ -106,7 +115,7 @@ async def run_simulation_async(
         stimulus=stimulus.model_dump(mode="json"),
         temperature=body.temperature,
         model=body.model,
-        _job_id=str(run.id),         # idempotency: job_id == run_id
+        _job_id=str(run.id),
     )
 
     QUEUE_DEPTH.inc()
@@ -122,18 +131,29 @@ async def run_simulation_async(
 # ── Sync endpoint — used by integration tests and the Airflow DAG ─────────────
 
 @router.post("/run/sync", response_model=SimulationRunResponse, status_code=201)
-async def run_simulation_sync(body: SimulateRunRequest, db: DbDep) -> SimulationRunResponse:
+async def run_simulation_sync(
+    body:   SimulateRunRequest,
+    claims: Annotated[object, Depends(require(Permission.SIMULATIONS_RUN))],
+    db:     DbDep,
+) -> SimulationRunResponse:
     """Run a simulation synchronously (blocking).
 
     Intended for CI, integration tests, and the Airflow DAG.
-    Does not apply rate limiting or ARQ queuing.
     """
+    from api.auth.jwt_handler import TokenClaims
+    claims_typed: TokenClaims = claims  # type: ignore[assignment]
+
     try:
         segment_uid = uuid.UUID(body.segment_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid segment_id format") from exc
 
-    seg_result = await db.execute(select(SegmentORM).where(SegmentORM.id == segment_uid))
+    seg_result = await db.execute(
+        select(SegmentORM).where(
+            SegmentORM.id == segment_uid,
+            SegmentORM.org_id == claims_typed.org_id,
+        )
+    )
     segment = seg_result.scalar_one_or_none()
     if segment is None:
         raise HTTPException(status_code=404, detail="Segment not found")
@@ -141,6 +161,7 @@ async def run_simulation_sync(body: SimulateRunRequest, db: DbDep) -> Simulation
     stimulus = _parse_stimulus(body.stimulus)
 
     run = SimulationRunORM(
+        org_id=claims_typed.org_id,
         segment_id=segment_uid,
         stimulus=stimulus.model_dump(mode="json"),
         status="running",
@@ -195,16 +216,22 @@ async def run_simulation_sync(body: SimulateRunRequest, db: DbDep) -> Simulation
 
 @router.get("/runs", response_model=SimulationRunListResponse)
 async def list_runs(
-    db: DbDep,
+    claims:     Annotated[object, Depends(require(Permission.SIMULATIONS_READ))],
+    db:         DbDep,
     segment_id: str | None = Query(default=None),
-    status: str | None     = Query(default=None, description="Filter by status."),
-    page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, ge=1, le=100),
+    status:     str | None = Query(default=None, description="Filter by status."),
+    page:       int = Query(default=1, ge=1),
+    size:       int = Query(default=20, ge=1, le=100),
 ) -> SimulationRunListResponse:
     """List simulation runs with optional filters."""
+    from api.auth.jwt_handler import TokenClaims
+    claims_typed: TokenClaims = claims  # type: ignore[assignment]
+
     offset      = (page - 1) * size
-    base_query  = select(SimulationRunORM)
-    count_query = select(func.count()).select_from(SimulationRunORM)
+    base_query  = select(SimulationRunORM).where(SimulationRunORM.org_id == claims_typed.org_id)
+    count_query = select(func.count()).select_from(SimulationRunORM).where(
+        SimulationRunORM.org_id == claims_typed.org_id
+    )
 
     if segment_id is not None:
         try:
@@ -231,14 +258,26 @@ async def list_runs(
 
 
 @router.get("/runs/{run_id}", response_model=SimulationRunResponse)
-async def get_run(run_id: str, db: DbDep) -> SimulationRunResponse:
+async def get_run(
+    run_id: str,
+    claims: Annotated[object, Depends(require(Permission.SIMULATIONS_READ))],
+    db:     DbDep,
+) -> SimulationRunResponse:
     """Get a single simulation run by ID."""
+    from api.auth.jwt_handler import TokenClaims
+    claims_typed: TokenClaims = claims  # type: ignore[assignment]
+
     try:
         run_uid = uuid.UUID(run_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid run_id format") from exc
 
-    result = await db.execute(select(SimulationRunORM).where(SimulationRunORM.id == run_uid))
+    result = await db.execute(
+        select(SimulationRunORM).where(
+            SimulationRunORM.id == run_uid,
+            SimulationRunORM.org_id == claims_typed.org_id,
+        )
+    )
     run = result.scalar_one_or_none()
     if run is None:
         raise HTTPException(status_code=404, detail="Simulation run not found")

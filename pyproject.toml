@@ -26,6 +26,8 @@ dependencies = [
     "psycopg2-binary>=2.9.0",
     "arq>=0.26.0",
     "prometheus-client>=0.20.0",
+    "PyJWT[cryptography]>=2.8.0",
+    "passlib[bcrypt]>=1.7.4",
 ]
 
 [project.optional-dependencies]

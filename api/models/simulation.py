@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, Float, String, func
+from sqlalchemy import DateTime, Float, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,8 +26,9 @@ from api.services.db import Base
 class SimulationRunORM(Base):
     __tablename__ = "simulation_runs"
 
-    id: Mapped[uuid.UUID]   = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    segment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id:         Mapped[uuid.UUID]           = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id:     Mapped[uuid.UUID | None]    = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True)
+    segment_id: Mapped[uuid.UUID]           = mapped_column(UUID(as_uuid=True), nullable=False)
 
     # The full stimulus object stored as JSONB so any type is supported
     stimulus: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)

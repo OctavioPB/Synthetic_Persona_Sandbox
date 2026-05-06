@@ -1,6 +1,7 @@
 import React from 'react'
 import { type Page } from '../App'
 import { useTheme } from '../hooks/useTheme'
+import { useAuthStore } from '../store/authStore'
 
 interface NavProps {
   currentPage: Page
@@ -57,6 +58,20 @@ const pages: Array<{ id: Page; label: string }> = [
 
 export default function Nav({ currentPage, onNavigate }: NavProps): React.JSX.Element {
   const { theme, toggle } = useTheme()
+  const { user, clearAuth } = useAuthStore()
+
+  const ghostBtnStyle: React.CSSProperties = {
+    background: 'none',
+    border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: 6,
+    color: 'rgba(255,255,255,0.5)',
+    cursor: 'pointer',
+    fontFamily: 'var(--fb)',
+    fontSize: 9,
+    letterSpacing: '2px',
+    textTransform: 'uppercase',
+    padding: '5px 10px',
+  }
 
   return (
     <nav style={navStyle}>
@@ -73,7 +88,7 @@ export default function Nav({ currentPage, onNavigate }: NavProps): React.JSX.El
       {/* App title */}
       <span style={appTitleStyle}>Synthetic Persona Sandbox</span>
 
-      {/* Nav links + theme toggle */}
+      {/* Nav links + user info + theme toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         {pages.map(({ id, label }) => (
           <button
@@ -84,21 +99,22 @@ export default function Nav({ currentPage, onNavigate }: NavProps): React.JSX.El
             {label}
           </button>
         ))}
+
+        {user && (
+          <>
+            <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, fontFamily: 'var(--fb)', letterSpacing: '1px' }}>
+              {user.email} · {user.role}
+            </span>
+            <button onClick={clearAuth} style={ghostBtnStyle} title="Sign out">
+              Logout
+            </button>
+          </>
+        )}
+
         <button
           onClick={toggle}
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          style={{
-            background: 'none',
-            border: '1px solid rgba(255,255,255,0.2)',
-            borderRadius: 6,
-            color: 'rgba(255,255,255,0.5)',
-            cursor: 'pointer',
-            fontFamily: 'var(--fb)',
-            fontSize: 9,
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            padding: '5px 10px',
-          }}
+          style={ghostBtnStyle}
         >
           {theme === 'dark' ? '☀ Light' : '◑ Dark'}
         </button>

@@ -6,12 +6,21 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown
 }
 
+function _getAuthHeaders(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem('spb_auth_token')
+    if (raw) return { Authorization: `Bearer ${raw}` }
+  } catch { /* ignore */ }
+  return {}
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, ...rest } = options
   const response = await fetch(`${BASE_URL}${path}`, {
     ...rest,
     headers: {
       'Content-Type': 'application/json',
+      ..._getAuthHeaders(),
       ...rest.headers,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -25,6 +34,37 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 // ── Domain types ──────────────────────────────────────────────────────────────
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+  expires_in: number
+}
+
+export interface ApiKeyResponse {
+  id: string
+  name: string
+  key_prefix: string
+  role: string
+  expires_at: string | null
+  created_at: string
+  is_active: boolean
+  raw_key?: string
+}
+
+export interface OrgResponse {
+  id: string
+  name: string
+  slug: string
+  plan: string
+}
+
+export interface MemberResponse {
+  user_id: string
+  email: string
+  role: string
+  joined_at: string
+}
 
 export interface HealthResponse {
   status: string
@@ -118,5 +158,33 @@ export const api = {
       const query = qs.toString()
       return request<SimulationRunResponse[]>(`/simulate/runs${query ? `?${query}` : ''}`)
     },
+  },
+
+  auth: {
+    devToken: (body: { email?: string; role?: string }): Promise<TokenResponse> =>
+      request<TokenResponse>('/auth/dev-token', { method: 'POST', body }),
+
+    createKey: (body: { name: string; role?: string; expires_days?: number }): Promise<ApiKeyResponse> =>
+      request<ApiKeyResponse>('/auth/keys', { method: 'POST', body }),
+
+    listKeys: (): Promise<{ items: ApiKeyResponse[]; total: number }> =>
+      request<{ items: ApiKeyResponse[]; total: number }>('/auth/keys'),
+
+    revokeKey: (keyId: string): Promise<void> =>
+      request<void>(`/auth/keys/${keyId}`, { method: 'DELETE' }),
+  },
+
+  org: {
+    get: (): Promise<OrgResponse> =>
+      request<OrgResponse>('/org'),
+
+    listMembers: (): Promise<{ items: MemberResponse[]; total: number }> =>
+      request<{ items: MemberResponse[]; total: number }>('/org/members'),
+
+    inviteMember: (body: { email: string; role?: string }): Promise<{ detail: string }> =>
+      request<{ detail: string }>('/org/members', { method: 'POST', body }),
+
+    removeMember: (userId: string): Promise<void> =>
+      request<void>(`/org/members/${userId}`, { method: 'DELETE' }),
   },
 }

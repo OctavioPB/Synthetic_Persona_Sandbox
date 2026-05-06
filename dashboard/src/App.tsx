@@ -8,8 +8,12 @@ import SegmentDetailPage from './pages/SegmentDetailPage'
 import CampaignLauncherPage from './pages/CampaignLauncherPage'
 import SimulationResultsPage from './pages/SimulationResultsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
+import LoginPage from './pages/LoginPage'
 import { useCampaignStore } from './store/campaignStore'
+import { useAuthStore } from './store/authStore'
 import { Segment } from './components/SegmentCard'
+
+const _AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === 'true'
 
 export type Page =
   | 'dashboard'
@@ -19,12 +23,19 @@ export type Page =
   | 'campaign-launcher'
   | 'simulation-results'
   | 'analytics'
+  | 'login'
 
 export default function App(): React.JSX.Element {
   const [page, setPage]               = useState<Page>('dashboard')
   const [activeSegment, setActiveSegment] = useState<Segment | null>(null)
 
   const { resetForm } = useCampaignStore()
+  const token = useAuthStore((s) => s.token)
+
+  // Redirect to login if auth is required and no token is present
+  if (_AUTH_REQUIRED && !token) {
+    return <LoginPage />
+  }
 
   const renderPage = (): React.JSX.Element => {
     switch (page) {
@@ -94,6 +105,9 @@ export default function App(): React.JSX.Element {
 
       case 'analytics':
         return <AnalyticsPage />
+
+      case 'login':
+        return <LoginPage />
     }
   }
 

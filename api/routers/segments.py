@@ -1,4 +1,4 @@
-"""Segments CRUD API — Sprint 3."""
+"""Segments CRUD API — Sprint 3 / S9-02."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.auth.dependencies import CurrentUser, require
+from api.auth.rbac import Permission
 from api.models.segment import (
     SegmentCreate,
     SegmentListResponse,
@@ -22,21 +24,21 @@ from api.services.db import get_db
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/segments", tags=["segments"])
 
-# Hardcoded org_id for Sprint 3 — replaced by Auth in Sprint 9
-_DEFAULT_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
-
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 @router.post("", response_model=SegmentResponse, status_code=201)
-async def create_segment(body: SegmentCreate, db: DbDep) -> SegmentResponse:
-    """Create a new segment definition.
+async def create_segment(
+    body:   SegmentCreate,
+    claims: Annotated[object, Depends(require(Permission.SEGMENTS_WRITE))],
+    db:     DbDep,
+) -> SegmentResponse:
+    """Create a new segment definition."""
+    from api.auth.jwt_handler import TokenClaims
+    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
-    The segment starts as stale (no embedding yet). Trigger the
-    `extract_segment_data` Airflow DAG to generate its embedding.
-    """
     segment = SegmentORM(
-        org_id=_DEFAULT_ORG_ID,
+        org_id=claims_typed.org_id,
         name=body.name,
         description=body.description,
         definition=body.definition.model_dump(),
@@ -51,21 +53,25 @@ async def create_segment(body: SegmentCreate, db: DbDep) -> SegmentResponse:
 
 @router.get("", response_model=SegmentListResponse)
 async def list_segments(
-    db: DbDep,
-    page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, ge=1, le=100),
+    claims: Annotated[object, Depends(require(Permission.SEGMENTS_READ))],
+    db:     DbDep,
+    page:   int = Query(default=1, ge=1),
+    size:   int = Query(default=20, ge=1, le=100),
 ) -> SegmentListResponse:
     """List segments for the current org, paginated."""
+    from api.auth.jwt_handler import TokenClaims
+    claims_typed: TokenClaims = claims  # type: ignore[assignment]
+
     offset = (page - 1) * size
 
     total_result = await db.execute(
-        select(func.count()).select_from(SegmentORM).where(SegmentORM.org_id == _DEFAULT_ORG_ID)
+        select(func.count()).select_from(SegmentORM).where(SegmentORM.org_id == claims_typed.org_id)
     )
     total: int = total_result.scalar_one()
 
     rows = await db.execute(
         select(SegmentORM)
-        .where(SegmentORM.org_id == _DEFAULT_ORG_ID)
+        .where(SegmentORM.org_id == claims_typed.org_id)
         .order_by(SegmentORM.created_at.desc())
         .offset(offset)
         .limit(size)
@@ -81,15 +87,22 @@ async def list_segments(
 
 
 @router.get("/{segment_id}", response_model=SegmentResponse)
-async def get_segment(segment_id: str, db: DbDep) -> SegmentResponse:
+async def get_segment(
+    segment_id: str,
+    claims:     Annotated[object, Depends(require(Permission.SEGMENTS_READ))],
+    db:         DbDep,
+) -> SegmentResponse:
     """Get a single segment by ID."""
+    from api.auth.jwt_handler import TokenClaims
+    claims_typed: TokenClaims = claims  # type: ignore[assignment]
+
     try:
         uid = uuid.UUID(segment_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid segment_id format") from exc
 
     result = await db.execute(
-        select(SegmentORM).where(SegmentORM.id == uid, SegmentORM.org_id == _DEFAULT_ORG_ID)
+        select(SegmentORM).where(SegmentORM.id == uid, SegmentORM.org_id == claims_typed.org_id)
     )
     segment = result.scalar_one_or_none()
     if segment is None:
@@ -98,19 +111,23 @@ async def get_segment(segment_id: str, db: DbDep) -> SegmentResponse:
 
 
 @router.put("/{segment_id}", response_model=SegmentResponse)
-async def update_segment(segment_id: str, body: SegmentUpdate, db: DbDep) -> SegmentResponse:
-    """Update a segment's name, description, or definition.
+async def update_segment(
+    segment_id: str,
+    body:       SegmentUpdate,
+    claims:     Annotated[object, Depends(require(Permission.SEGMENTS_WRITE))],
+    db:         DbDep,
+) -> SegmentResponse:
+    """Update a segment's name, description, or definition."""
+    from api.auth.jwt_handler import TokenClaims
+    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
-    Changing the definition marks the segment as stale — re-trigger
-    `extract_segment_data` to refresh the embedding.
-    """
     try:
         uid = uuid.UUID(segment_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid segment_id format") from exc
 
     result = await db.execute(
-        select(SegmentORM).where(SegmentORM.id == uid, SegmentORM.org_id == _DEFAULT_ORG_ID)
+        select(SegmentORM).where(SegmentORM.id == uid, SegmentORM.org_id == claims_typed.org_id)
     )
     segment = result.scalar_one_or_none()
     if segment is None:
@@ -122,7 +139,7 @@ async def update_segment(segment_id: str, body: SegmentUpdate, db: DbDep) -> Seg
         segment.description = body.description
     if body.definition is not None:
         segment.definition = body.definition.model_dump()
-        segment.is_stale = True  # definition changed → embedding is outdated
+        segment.is_stale = True
 
     await db.flush()
     await db.refresh(segment)
@@ -131,15 +148,22 @@ async def update_segment(segment_id: str, body: SegmentUpdate, db: DbDep) -> Seg
 
 
 @router.delete("/{segment_id}", status_code=204)
-async def delete_segment(segment_id: str, db: DbDep) -> None:
+async def delete_segment(
+    segment_id: str,
+    claims:     Annotated[object, Depends(require(Permission.SEGMENTS_WRITE))],
+    db:         DbDep,
+) -> None:
     """Delete a segment and its Qdrant embedding."""
+    from api.auth.jwt_handler import TokenClaims
+    claims_typed: TokenClaims = claims  # type: ignore[assignment]
+
     try:
         uid = uuid.UUID(segment_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid segment_id format") from exc
 
     result = await db.execute(
-        select(SegmentORM).where(SegmentORM.id == uid, SegmentORM.org_id == _DEFAULT_ORG_ID)
+        select(SegmentORM).where(SegmentORM.id == uid, SegmentORM.org_id == claims_typed.org_id)
     )
     segment = result.scalar_one_or_none()
     if segment is None:
@@ -150,7 +174,6 @@ async def delete_segment(segment_id: str, db: DbDep) -> None:
             from ml.segment_models.qdrant_setup import QdrantSegmentStore
             QdrantSegmentStore().delete_segment(segment.qdrant_id)
         except Exception as exc:
-            # Log but do not block deletion if Qdrant is unavailable
             logger.warning("Could not delete Qdrant point for segment %s: %s", segment_id, exc)
 
     await db.delete(segment)
