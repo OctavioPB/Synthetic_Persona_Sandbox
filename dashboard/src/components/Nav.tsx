@@ -32,6 +32,7 @@ const appTitleStyle: React.CSSProperties = {
 
 const navLinkBase: React.CSSProperties = {
   background: 'none',
+  backgroundColor: 'transparent',
   border: 'none',
   color: 'rgba(255,255,255,0.45)',
   cursor: 'pointer',
@@ -41,7 +42,7 @@ const navLinkBase: React.CSSProperties = {
   textTransform: 'uppercase',
   padding: '5px 8px',
   borderRadius: 6,
-  transition: 'color 0.15s',
+  transition: 'color 0.15s, background-color 0.15s',
 }
 
 const navLinkActive: React.CSSProperties = {
@@ -54,6 +55,8 @@ const pages: Array<{ id: Page; label: string }> = [
   { id: 'segments',           label: 'Segments'   },
   { id: 'campaign-launcher',  label: 'Campaigns'  },
   { id: 'analytics',          label: 'Analytics'  },
+  { id: 'info',               label: 'Info'       },
+  { id: 'admin',              label: 'Admin'      },
 ]
 
 export default function Nav({ currentPage, onNavigate }: NavProps): React.JSX.Element {

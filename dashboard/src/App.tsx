@@ -8,6 +8,8 @@ import SegmentDetailPage from './pages/SegmentDetailPage'
 import CampaignLauncherPage from './pages/CampaignLauncherPage'
 import SimulationResultsPage from './pages/SimulationResultsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
+import AdminPage from './pages/AdminPage'
+import InfoPage from './pages/InfoPage'
 import LoginPage from './pages/LoginPage'
 import { useCampaignStore } from './store/campaignStore'
 import { useAuthStore } from './store/authStore'
@@ -23,6 +25,8 @@ export type Page =
   | 'campaign-launcher'
   | 'simulation-results'
   | 'analytics'
+  | 'admin'
+  | 'info'
   | 'login'
 
 export default function App(): React.JSX.Element {
@@ -105,6 +109,12 @@ export default function App(): React.JSX.Element {
 
       case 'analytics':
         return <AnalyticsPage />
+
+      case 'admin':
+        return <AdminPage />
+
+      case 'info':
+        return <InfoPage />
 
       case 'login':
         return <LoginPage />

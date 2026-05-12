@@ -17,5 +17,9 @@ export const Default: Story = {
 
 export const LightVariant: Story = {
   args: { children: 'Hero Label', light: true },
-  parameters: { backgrounds: { default: 'navy' } },
+  globals: {
+    backgrounds: {
+      value: "navy"
+    }
+  },
 }

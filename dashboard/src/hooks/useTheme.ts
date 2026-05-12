@@ -11,7 +11,7 @@ function getInitialTheme(): Theme {
   } catch {
     // localStorage unavailable (SSR / sandboxed)
   }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return 'light'
 }
 
 function applyTheme(theme: Theme): void {

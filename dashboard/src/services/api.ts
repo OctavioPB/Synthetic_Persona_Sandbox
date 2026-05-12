@@ -104,17 +104,37 @@ export interface SimulationRunResponse {
   id: string
   segment_id: string
   status: string
-  stimulus_type: string
+  stimulus: Record<string, unknown>
   verbatim_response: string | null
   sentiment: string | null
   likelihood_to_convert: number | null
   conversion_score: number | null
-  error_code: string | null
-  error_detail: string | null
-  latency_ms: number | null
+  llm_metadata: Record<string, unknown>
   model_id: string | null
   created_at: string
   completed_at: string | null
+}
+
+export interface AdminStats {
+  segments:          number
+  campaigns:         number
+  campaign_variants: number
+  simulation_runs:   number
+}
+
+export interface SeedResult {
+  segments:          number
+  campaigns:         number
+  campaign_variants: number
+  simulation_runs:   number
+  message:           string
+}
+
+export interface ClearResult {
+  deleted_segments:  number
+  deleted_campaigns: number
+  deleted_runs:      number
+  message:           string
 }
 
 // ── API surface ───────────────────────────────────────────────────────────────
@@ -125,7 +145,7 @@ export const api = {
 
   segments: {
     list: (): Promise<SegmentSummary[]> =>
-      request<SegmentSummary[]>('/segments'),
+      request<{ items: SegmentSummary[] }>('/segments?size=100').then((r) => r.items),
   },
 
   campaigns: {
@@ -156,7 +176,7 @@ export const api = {
       if (params.status)     qs.set('status', params.status)
       if (params.size)       qs.set('size', String(params.size))
       const query = qs.toString()
-      return request<SimulationRunResponse[]>(`/simulate/runs${query ? `?${query}` : ''}`)
+      return request<{ items: SimulationRunResponse[] }>(`/simulate/runs${query ? `?${query}` : ''}`).then((r) => r.items)
     },
   },
 
@@ -186,5 +206,21 @@ export const api = {
 
     removeMember: (userId: string): Promise<void> =>
       request<void>(`/org/members/${userId}`, { method: 'DELETE' }),
+  },
+
+  admin: {
+    stats: (): Promise<AdminStats> =>
+      request<AdminStats>('/admin/stats'),
+
+    seed: (params: { n_segments?: number; n_campaigns?: number; n_runs?: number }): Promise<SeedResult> => {
+      const qs = new URLSearchParams()
+      if (params.n_segments  != null) qs.set('n_segments',  String(params.n_segments))
+      if (params.n_campaigns != null) qs.set('n_campaigns', String(params.n_campaigns))
+      if (params.n_runs      != null) qs.set('n_runs',      String(params.n_runs))
+      return request<SeedResult>(`/admin/seed?${qs.toString()}`, { method: 'POST' })
+    },
+
+    clear: (): Promise<ClearResult> =>
+      request<ClearResult>('/admin/clear', { method: 'DELETE' }),
   },
 }

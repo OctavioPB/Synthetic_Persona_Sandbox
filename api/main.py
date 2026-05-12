@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from api.routers import auth, campaigns, health, org, profiles, segments, simulations, ws
+from api.routers import admin, auth, campaigns, health, org, profiles, segments, simulations, ws
 from api.services.metrics import API_REQUEST_LATENCY
 from api.services.queue import close_arq_pool, get_arq_pool
 
@@ -33,6 +33,7 @@ app = FastAPI(
         "name": "MIT",
     },
     openapi_tags=[
+        {"name": "admin",       "description": "Seed and clear database — dev/staging only."},
         {"name": "health",      "description": "Service liveness and readiness."},
         {"name": "auth",        "description": "JWT issuance and API key management."},
         {"name": "org",         "description": "Organization management, members, and audit log."},
@@ -46,7 +47,14 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5176",
+        "http://localhost:5177",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -98,6 +106,7 @@ async def audit_write_middleware(request: Request, call_next: object) -> Respons
     return response
 
 
+app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(org.router)
 app.include_router(health.router)

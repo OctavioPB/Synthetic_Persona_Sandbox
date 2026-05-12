@@ -4,12 +4,11 @@ import '../src/styles/tokens.css'
 const preview: Preview = {
   parameters: {
     backgrounds: {
-      default: 'light',
-      values: [
-        { name: 'light', value: '#F4F6F9' },
-        { name: 'dark',  value: '#0f1117' },
-        { name: 'navy',  value: '#003366' },
-      ],
+      options: {
+        light: { name: 'light', value: '#F4F6F9' },
+        dark: { name: 'dark',  value: '#0f1117' },
+        navy: { name: 'navy',  value: '#003366' }
+      }
     },
     controls: {
       matchers: {
@@ -18,6 +17,12 @@ const preview: Preview = {
       },
     },
   },
+
+  initialGlobals: {
+    backgrounds: {
+      value: 'light'
+    }
+  }
 }
 
 export default preview

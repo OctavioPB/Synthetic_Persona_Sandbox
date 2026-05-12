@@ -1,5 +1,8 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import Eyebrow from '../components/Eyebrow'
+import { api, AdminStats, SimulationRunResponse } from '../services/api'
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const heroStyle: React.CSSProperties = {
   backgroundColor: 'var(--primary)',
@@ -105,7 +108,58 @@ const cardBody: React.CSSProperties = {
   lineHeight: 1.7,
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function DashboardPage(): React.JSX.Element {
+  const [stats, setStats]   = useState<AdminStats | null>(null)
+  const [runs,  setRuns]    = useState<SimulationRunResponse[]>([])
+
+  useEffect(() => {
+    api.admin.stats().then(setStats).catch(() => {/* silently leave null */})
+    api.simulations.list({ size: 100 }).then(setRuns).catch(() => {/* silently leave [] */})
+  }, [])
+
+  const simCount = stats?.simulation_runs ?? null
+  const segCount = stats?.segments ?? null
+
+  const avgScore: number | null = (() => {
+    const scored = runs.filter((r) => r.status === 'completed' && r.conversion_score !== null)
+    if (scored.length === 0) return null
+    return scored.reduce((a, r) => a + (r.conversion_score ?? 0), 0) / scored.length
+  })()
+
+  const fmtCount  = (n: number | null) => (n === null ? '—' : n.toLocaleString())
+  const fmtScore  = (n: number | null) => (n === null ? '—' : `${Math.round(n * 100)}%`)
+
+  const heroStats = [
+    { value: fmtCount(simCount),  label: 'Simulation Runs'       },
+    { value: fmtCount(segCount),  label: 'Active Segments'        },
+    { value: fmtScore(avgScore),  label: 'Avg. Conversion Score'  },
+  ]
+
+  const capabilities = [
+    {
+      num: '01',
+      title: 'Segment Builder',
+      body: 'Define customer segments by age, geography, category affinity, and purchase history. Segments power all persona simulations.',
+    },
+    {
+      num: '02',
+      title: 'Campaign Launcher',
+      body: 'Test ad copy, price changes, and promo codes against any segment. Get a verbatim persona response and conversion score in seconds.',
+    },
+    {
+      num: '03',
+      title: 'Analytics',
+      body: 'Track conversion trends over time, compare stimulus types, and export the full simulation history to CSV.',
+    },
+    {
+      num: '04',
+      title: 'Multi-Tenancy',
+      body: 'Each organisation has its own isolated data and API keys. Role-based access controls separate admin, analyst, and viewer permissions.',
+    },
+  ]
+
   return (
     <div>
       {/* Hero */}
@@ -119,11 +173,7 @@ export default function DashboardPage(): React.JSX.Element {
             before a single dollar reaches the ad platform.
           </p>
           <div style={statRow}>
-            {[
-              { value: '—', label: 'Simulation Runs' },
-              { value: '—', label: 'Active Segments' },
-              { value: '—', label: 'Avg. Conversion Score' },
-            ].map((s) => (
+            {heroStats.map((s) => (
               <div key={s.label} style={statItem}>
                 <div style={statValue}>{s.value}</div>
                 <div style={statLabel}>{s.label}</div>
@@ -133,10 +183,10 @@ export default function DashboardPage(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Getting started */}
+      {/* Capabilities */}
       <div style={{ backgroundColor: 'var(--light)', padding: '0 0 48px' }}>
         <div style={section}>
-          <Eyebrow>Platform Status</Eyebrow>
+          <Eyebrow>Platform</Eyebrow>
           <h2
             style={{
               fontFamily: "'Fraunces', Georgia, serif",
@@ -146,26 +196,21 @@ export default function DashboardPage(): React.JSX.Element {
               margin: '0 0 4px',
             }}
           >
-            Sprint 1 — Infrastructure
+            What you can do
           </h2>
           <p style={{ fontFamily: 'var(--fb)', fontSize: 13, color: 'var(--mid)', marginBottom: 0 }}>
-            Foundation services are being configured. Dashboard features will unlock as each sprint completes.
+            All features are live. Use the navigation above to explore each module.
           </p>
 
           <div style={cardGrid}>
-            {[
-              { num: '01', title: 'Infrastructure', body: 'Kafka, PostgreSQL, Redis, and Qdrant are configured via Docker Compose and ready for local development.' },
-              { num: '02', title: 'API Layer', body: 'FastAPI backend is live at /health. Persona and simulation endpoints will be added in Sprint 4.' },
-              { num: '03', title: 'Segment Engine', body: 'Customer segment definitions, embeddings, and behavioral data pipelines are planned for Sprint 3.' },
-              { num: '04', title: 'Persona AI', body: 'LLM-powered persona inference with conversion scoring will be implemented in Sprint 4.' },
-            ].map(({ num, title, body }) => (
+            {capabilities.map(({ num, title, body }) => (
               <div key={num} style={card}>
                 <div
                   style={{
                     fontFamily: "'Fraunces', Georgia, serif",
                     fontSize: 44,
                     fontWeight: 300,
-                    color: '#f1f5f9',
+                    color: 'var(--primary-30)',
                     lineHeight: 1,
                     marginBottom: 2,
                     userSelect: 'none',

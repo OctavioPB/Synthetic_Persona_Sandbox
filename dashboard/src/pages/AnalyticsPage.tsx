@@ -26,15 +26,24 @@ function fmtLatency(ms: number | null): string {
   return ms !== null ? `${(ms / 1000).toFixed(1)}s` : '—'
 }
 
+function stimType(r: SimulationRunResponse): string {
+  return (r.stimulus['type'] as string | undefined) ?? ''
+}
+
+function stimLatency(r: SimulationRunResponse): number | null {
+  const v = (r.llm_metadata?.['latency_ms'] as number | undefined) ?? null
+  return v
+}
+
 function exportCSV(runs: SimulationRunResponse[]): void {
   const headers = ['ID', 'Date', 'Stimulus Type', 'Conversion Score', 'Sentiment', 'Latency (ms)', 'Status']
   const rows = runs.map((r) => [
     r.id,
     r.created_at,
-    r.stimulus_type,
+    stimType(r),
     r.conversion_score?.toFixed(3) ?? '',
     r.sentiment ?? '',
-    r.latency_ms?.toString() ?? '',
+    stimLatency(r)?.toString() ?? '',
     r.status,
   ])
   const csv = [headers, ...rows].map((row) => row.join(',')).join('\n')
@@ -202,7 +211,7 @@ function OverviewTab({ runs }: { runs: SimulationRunResponse[] }): React.JSX.Ele
 
   const stimulusData: StimulusBarData[] = useMemo(() => {
     return (['ad_copy', 'price_change', 'promo'] as const).map((t) => {
-      const typeRuns = completed.filter((r) => r.stimulus_type === t)
+      const typeRuns = completed.filter((r) => stimType(r) === t)
       const avg = typeRuns.length > 0
         ? typeRuns.reduce((a, r) => a + (r.conversion_score ?? 0), 0) / typeRuns.length
         : 0
@@ -248,7 +257,7 @@ function HistoryTab({ runs }: { runs: SimulationRunResponse[] }): React.JSX.Elem
 
   const filtered = useMemo(() => {
     let result = [...runs]
-    if (filterType)   result = result.filter((r) => r.stimulus_type === filterType)
+    if (filterType)   result = result.filter((r) => stimType(r) === filterType)
     if (filterStatus) result = result.filter((r) => r.status === filterStatus)
     const min = parseFloat(filterMinScore) / 100
     const max = parseFloat(filterMaxScore) / 100
@@ -262,8 +271,8 @@ function HistoryTab({ runs }: { runs: SimulationRunResponse[] }): React.JSX.Elem
         va = a.conversion_score ?? -1
         vb = b.conversion_score ?? -1
       } else if (sortKey === 'latency') {
-        va = a.latency_ms ?? 0
-        vb = b.latency_ms ?? 0
+        va = stimLatency(a) ?? 0
+        vb = stimLatency(b) ?? 0
       } else {
         va = new Date(a.created_at).getTime()
         vb = new Date(b.created_at).getTime()
@@ -407,7 +416,7 @@ function HistoryTab({ runs }: { runs: SimulationRunResponse[] }): React.JSX.Elem
                       padding: '2px 7px',
                       fontWeight: 700,
                     }}>
-                      {r.stimulus_type.replace('_', ' ')}
+                      {stimType(r).replace('_', ' ')}
                     </span>
                   </td>
                   <td style={{ padding: '10px 16px', fontFamily: 'var(--fb)', fontSize: 13, fontWeight: 700, color: scoreColor(r.conversion_score) }}>
@@ -417,7 +426,7 @@ function HistoryTab({ runs }: { runs: SimulationRunResponse[] }): React.JSX.Elem
                     <SentimentPill sentiment={r.sentiment} />
                   </td>
                   <td style={{ padding: '10px 16px', fontFamily: 'var(--fb)', fontSize: 12, color: 'var(--mid)' }}>
-                    {fmtLatency(r.latency_ms)}
+                    {fmtLatency(stimLatency(r))}
                   </td>
                   <td style={{ padding: '10px 16px' }}>
                     <div style={{
@@ -476,7 +485,7 @@ function CompareTab({ runs }: { runs: SimulationRunResponse[] }): React.JSX.Elem
   const chartData: ComparisonItem[] = completed
     .filter((r) => selected.has(r.id))
     .map((r) => ({
-      name: `${r.stimulus_type.replace('_', ' ')} · ${fmtDate(r.created_at)}`,
+      name: `${stimType(r).replace('_', ' ')} · ${fmtDate(r.created_at)}`,
       score: r.conversion_score!,
     }))
 
@@ -517,7 +526,7 @@ function CompareTab({ runs }: { runs: SimulationRunResponse[] }): React.JSX.Elem
                   />
                   <div>
                     <div style={{ fontFamily: 'var(--fb)', fontSize: 11, color: 'var(--dark)', fontWeight: 500 }}>
-                      {r.stimulus_type.replace('_', ' ')}
+                      {stimType(r).replace('_', ' ')}
                     </div>
                     <div style={{ fontFamily: 'var(--fb)', fontSize: 10, color: 'var(--mid)' }}>
                       {fmtDate(r.created_at)} · {fmtScore(r.conversion_score)}
@@ -551,7 +560,7 @@ export default function AnalyticsPage(): React.JSX.Element {
   const [tab, setTab]       = useState<Tab>('overview')
 
   useEffect(() => {
-    api.simulations.list({ size: 200 })
+    api.simulations.list({ size: 100 })
       .then(setRuns)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false))
@@ -567,8 +576,9 @@ export default function AnalyticsPage(): React.JSX.Element {
     if (completed.length === 0) return null
     const byType: Record<string, number[]> = {}
     completed.forEach((r) => {
-      if (!byType[r.stimulus_type]) byType[r.stimulus_type] = []
-      byType[r.stimulus_type].push(r.conversion_score!)
+      const t = stimType(r)
+      if (!byType[t]) byType[t] = []
+      byType[t].push(r.conversion_score!)
     })
     const best = Object.entries(byType)
       .map(([t, scores]) => ({ t, avg: scores.reduce((a, v) => a + v, 0) / scores.length }))
