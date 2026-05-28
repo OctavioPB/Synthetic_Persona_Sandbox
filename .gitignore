@@ -19,6 +19,7 @@ build/
 .env
 .env.local
 .env.*.local
+/planning
 
 # Airflow
 airflow/logs/
