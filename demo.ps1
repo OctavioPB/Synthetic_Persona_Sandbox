@@ -52,16 +52,13 @@ Write-Host "  ======================================================" -Foregroun
 Write-Host ""
 
 # =============================================================================
-# STEP 1 -- Kill all processes on app ports
+# STEP 1 -- Kill stale API and frontend processes
 # =============================================================================
 #
-# Ports used by Docker services, the API server, and the Vite dev server:
-#   5432  PostgreSQL          6379  Redis         6333/6334  Qdrant HTTP/gRPC
-#   2181  Zookeeper           9092  Kafka         9101       Kafka JMX
-#   8081  Schema Registry     9308  Kafka Exporter  9090     Prometheus
-#   3000  Grafana             8001  FastAPI       5173       Vite
+# Only the locally-launched processes are killed (FastAPI + Vite).
+# Docker service ports are left alone -- Docker manages its own port bindings.
 
-$AppPorts = @(5432, 6379, 6333, 6334, 2181, 9092, 9101, 8081, 9308, 9090, 3000, 8001, 5173)
+$AppPorts = @(8001, 5173)
 
 Write-Step "Clearing ports: $($AppPorts -join '  ')"
 
