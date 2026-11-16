@@ -13,7 +13,6 @@ import logging
 import random
 import time
 import uuid
-from datetime import datetime
 
 from ingestion.producers.base_producer import BaseAvroProducer
 from ingestion.schemas.events import (
@@ -34,17 +33,46 @@ logger = logging.getLogger(__name__)
 _CATEGORIES = ["Electronics", "Fashion", "Home & Garden", "Sports", "Books", "Food & Beverage"]
 
 _PRODUCTS: dict[str, list[tuple[str, str]]] = {
-    "Electronics":    [("PROD-E01", "Laptop Pro 15"), ("PROD-E02", "Wireless Earbuds"), ("PROD-E03", "4K Monitor")],
-    "Fashion":        [("PROD-F01", "Running Shoes"), ("PROD-F02", "Denim Jacket"), ("PROD-F03", "Leather Watch")],
-    "Home & Garden":  [("PROD-H01", "Coffee Maker"), ("PROD-H02", "LED Lamp"), ("PROD-H03", "Planter Set")],
-    "Sports":         [("PROD-S01", "Yoga Mat"), ("PROD-S02", "Resistance Bands"), ("PROD-S03", "Water Bottle")],
-    "Books":          [("PROD-B01", "Clean Code"), ("PROD-B02", "Designing Data-Intensive Apps"), ("PROD-B03", "Deep Work")],
-    "Food & Beverage":[("PROD-FB01", "Premium Coffee Blend"), ("PROD-FB02", "Protein Bars 12-Pack"), ("PROD-FB03", "Olive Oil")],
+    "Electronics": [
+        ("PROD-E01", "Laptop Pro 15"),
+        ("PROD-E02", "Wireless Earbuds"),
+        ("PROD-E03", "4K Monitor"),
+    ],
+    "Fashion": [
+        ("PROD-F01", "Running Shoes"),
+        ("PROD-F02", "Denim Jacket"),
+        ("PROD-F03", "Leather Watch"),
+    ],
+    "Home & Garden": [
+        ("PROD-H01", "Coffee Maker"),
+        ("PROD-H02", "LED Lamp"),
+        ("PROD-H03", "Planter Set"),
+    ],
+    "Sports": [
+        ("PROD-S01", "Yoga Mat"),
+        ("PROD-S02", "Resistance Bands"),
+        ("PROD-S03", "Water Bottle"),
+    ],
+    "Books": [
+        ("PROD-B01", "Clean Code"),
+        ("PROD-B02", "Designing Data-Intensive Apps"),
+        ("PROD-B03", "Deep Work"),
+    ],
+    "Food & Beverage": [
+        ("PROD-FB01", "Premium Coffee Blend"),
+        ("PROD-FB02", "Protein Bars 12-Pack"),
+        ("PROD-FB03", "Olive Oil"),
+    ],
 }
 
 _PAGE_URLS = [
-    "/", "/products", "/products/{category}/{slug}",
-    "/cart", "/checkout", "/account", "/wishlist",
+    "/",
+    "/products",
+    "/products/{category}/{slug}",
+    "/cart",
+    "/checkout",
+    "/account",
+    "/wishlist",
 ]
 
 _USER_AGENTS = [
@@ -57,7 +85,7 @@ _REFERRERS = [None, "https://google.com", "https://instagram.com", "https://t.co
 
 
 def _random_ip() -> str:
-    return f"{random.randint(1,254)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
+    return f"{random.randint(1, 254)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
 
 
 def _random_email() -> str:
@@ -74,15 +102,21 @@ class FixtureEventProducer(BaseAvroProducer):
     """Produces fake behavioral events for all three event types."""
 
     def _register_schemas(self) -> None:
-        pv_schema  = load_avro_schema("page_view_event")
+        pv_schema = load_avro_schema("page_view_event")
         pur_schema = load_avro_schema("purchase_event")
         ses_schema = load_avro_schema("session_event")
 
-        self._pv_schema_id  = self._schema_registry.register_schema(f"{TOPIC_PAGE_VIEWS}-value",  pv_schema)
-        self._pur_schema_id = self._schema_registry.register_schema(f"{TOPIC_PURCHASES}-value",   pur_schema)
-        self._ses_schema_id = self._schema_registry.register_schema(f"{TOPIC_SESSIONS}-value",    ses_schema)
+        self._pv_schema_id = self._schema_registry.register_schema(
+            f"{TOPIC_PAGE_VIEWS}-value", pv_schema
+        )
+        self._pur_schema_id = self._schema_registry.register_schema(
+            f"{TOPIC_PURCHASES}-value", pur_schema
+        )
+        self._ses_schema_id = self._schema_registry.register_schema(
+            f"{TOPIC_SESSIONS}-value", ses_schema
+        )
 
-        self._pv_schema  = pv_schema
+        self._pv_schema = pv_schema
         self._pur_schema = pur_schema
         self._ses_schema = ses_schema
 
@@ -90,7 +124,7 @@ class FixtureEventProducer(BaseAvroProducer):
 
     def produce_page_view(self, user_id: str | None = None) -> RawPageViewEvent:
         """Produce one fake PageViewEvent. Returns the event for inspection."""
-        uid      = user_id or str(uuid.uuid4())
+        uid = user_id or str(uuid.uuid4())
         category = random.choice(_CATEGORIES)
         event = RawPageViewEvent(
             event_id=str(uuid.uuid4()),
@@ -113,7 +147,7 @@ class FixtureEventProducer(BaseAvroProducer):
 
     def produce_purchase(self, user_id: str | None = None) -> RawPurchaseEvent:
         """Produce one fake PurchaseEvent. Returns the event for inspection."""
-        uid      = user_id or str(uuid.uuid4())
+        uid = user_id or str(uuid.uuid4())
         category = random.choice(_CATEGORIES)
         product_id, product_name = random.choice(_PRODUCTS[category])
         event = RawPurchaseEvent(
@@ -201,5 +235,7 @@ class FixtureEventProducer(BaseAvroProducer):
         self.flush()
         logger.info(
             "Fixture batch produced: %d page_views, %d purchases, %d sessions.",
-            n_page_views, n_purchases, n_sessions,
+            n_page_views,
+            n_purchases,
+            n_sessions,
         )

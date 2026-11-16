@@ -20,6 +20,7 @@ _AVSC_FILES = list(_SCHEMA_DIR.glob("*.avsc"))
 
 # ── Avro schema file validation ────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("schema_path", _AVSC_FILES, ids=[p.name for p in _AVSC_FILES])
 def test_avsc_is_valid_json(schema_path: Path) -> None:
     with schema_path.open() as f:
@@ -42,13 +43,14 @@ def test_avsc_has_required_fields(schema_path: Path) -> None:
         data = json.load(f)
     field_names = {f["name"] for f in data["fields"]}
     # Every event must have these core fields
-    assert "event_id"     in field_names
-    assert "user_id"      in field_names
-    assert "session_id"   in field_names
+    assert "event_id" in field_names
+    assert "user_id" in field_names
+    assert "session_id" in field_names
     assert "timestamp_ms" in field_names
 
 
 # ── load_avro_schema helper ────────────────────────────────────────────────────
+
 
 def test_load_avro_schema_returns_dict() -> None:
     schema = load_avro_schema("page_view_event")
@@ -62,6 +64,7 @@ def test_load_avro_schema_unknown_raises() -> None:
 
 
 # ── Pydantic event model validation ───────────────────────────────────────────
+
 
 def test_raw_page_view_event_valid() -> None:
     event = RawPageViewEvent(
@@ -109,4 +112,4 @@ def test_raw_session_event_default_duration_none() -> None:
 
 def test_session_event_type_enum_values() -> None:
     assert SessionEventType.SESSION_START.value == "SESSION_START"
-    assert SessionEventType.SESSION_END.value   == "SESSION_END"
+    assert SessionEventType.SESSION_END.value == "SESSION_END"

@@ -13,8 +13,8 @@ from ml.synthetic_data.stimulus_schema import (
     format_stimulus_prompt,
 )
 
-
 # ── AdCopyStimulus ─────────────────────────────────────────────────────────────
+
 
 def test_ad_copy_stimulus_defaults() -> None:
     s = AdCopyStimulus(headline="H", body_copy="B", cta="Buy now")
@@ -53,6 +53,7 @@ def test_ad_copy_format_without_optional_fields() -> None:
 
 # ── PriceChangeStimulus ────────────────────────────────────────────────────────
 
+
 def test_price_change_discount_pct() -> None:
     s = PriceChangeStimulus(product_name="Widget", original_price=100.0, new_price=80.0)
     assert s.discount_pct == pytest.approx(20.0)
@@ -79,6 +80,7 @@ def test_price_change_format_shows_direction() -> None:
 
 
 # ── PromoStimulus ──────────────────────────────────────────────────────────────
+
 
 def test_promo_percent_valid() -> None:
     s = PromoStimulus(promo_code="SAVE20", discount_value=20.0, discount_type="percent")
@@ -114,15 +116,20 @@ def test_promo_format_includes_minimum() -> None:
 
 # ── Discriminated union ────────────────────────────────────────────────────────
 
+
 def test_any_stimulus_dispatches_ad_copy() -> None:
     adapter: TypeAdapter[AnyStimulus] = TypeAdapter(AnyStimulus)  # type: ignore[arg-type]
-    parsed = adapter.validate_python({"type": "ad_copy", "headline": "H", "body_copy": "B", "cta": "Buy"})
+    parsed = adapter.validate_python(
+        {"type": "ad_copy", "headline": "H", "body_copy": "B", "cta": "Buy"}
+    )
     assert isinstance(parsed, AdCopyStimulus)
 
 
 def test_any_stimulus_dispatches_promo() -> None:
     adapter: TypeAdapter[AnyStimulus] = TypeAdapter(AnyStimulus)  # type: ignore[arg-type]
-    parsed = adapter.validate_python({"type": "promo", "promo_code": "X", "discount_value": 10.0, "discount_type": "percent"})
+    parsed = adapter.validate_python(
+        {"type": "promo", "promo_code": "X", "discount_value": 10.0, "discount_type": "percent"}
+    )
     assert isinstance(parsed, PromoStimulus)
 
 

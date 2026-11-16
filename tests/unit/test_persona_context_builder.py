@@ -36,6 +36,7 @@ def feature_stats() -> dict:
 
 # ── Core structure ─────────────────────────────────────────────────────────────
 
+
 def test_build_system_prompt_returns_string(builder, full_definition, feature_stats) -> None:
     prompt = builder.build_system_prompt(
         segment_name="Gen Z Madrid",
@@ -61,9 +62,9 @@ def test_prompt_contains_demographics(builder, full_definition, feature_stats) -
 
 def test_prompt_contains_behavioral_stats(builder, full_definition, feature_stats) -> None:
     prompt = builder.build_system_prompt("Seg", full_definition, feature_stats, 500)
-    assert "0.120" in prompt    # purchase_frequency formatted to 3 decimal places
+    assert "0.120" in prompt  # purchase_frequency formatted to 3 decimal places
     assert "$45.50" in prompt
-    assert "8.0%" in prompt     # conversion_rate as percentage
+    assert "8.0%" in prompt  # conversion_rate as percentage
 
 
 def test_prompt_contains_categories(builder, full_definition, feature_stats) -> None:
@@ -80,6 +81,7 @@ def test_prompt_contains_json_schema(builder, full_definition, feature_stats) ->
 
 
 # ── Edge cases ─────────────────────────────────────────────────────────────────
+
 
 def test_no_feature_stats_returns_fallback_text(builder, full_definition) -> None:
     prompt = builder.build_system_prompt("Seg", full_definition, None, 0)

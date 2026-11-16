@@ -13,8 +13,8 @@ from __future__ import annotations
 import os
 import random
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -27,12 +27,13 @@ from api.auth.rbac import Permission
 from api.models.campaign import CampaignORM, CampaignVariantORM
 from api.models.segment import SegmentORM
 from api.models.simulation import SimulationRunORM
+from api.services.cache import invalidate_org_runs
 from api.services.db import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
-_ENV  = os.getenv("ENV", "development").lower()
+_ENV = os.getenv("ENV", "development").lower()
 
 
 def _guard_non_production() -> None:
@@ -45,26 +46,27 @@ def _guard_non_production() -> None:
 
 # ── Response models ───────────────────────────────────────────────────────────
 
+
 class StatsResponse(BaseModel):
-    segments:         int
-    campaigns:        int
+    segments: int
+    campaigns: int
     campaign_variants: int
-    simulation_runs:  int
+    simulation_runs: int
 
 
 class SeedResponse(BaseModel):
-    segments:         int
-    campaigns:        int
+    segments: int
+    campaigns: int
     campaign_variants: int
-    simulation_runs:  int
-    message:          str
+    simulation_runs: int
+    message: str
 
 
 class ClearResponse(BaseModel):
-    deleted_segments:  int
+    deleted_segments: int
     deleted_campaigns: int
-    deleted_runs:      int
-    message:           str
+    deleted_runs: int
+    message: str
 
 
 # ── Seed corpus ───────────────────────────────────────────────────────────────
@@ -146,7 +148,7 @@ _CAMPAIGN_SUFFIXES = [
     "Early Access",
 ]
 
-_AD_COPY_VARIANTS: list[dict] = [
+_AD_COPY_VARIANTS: list[dict[str, Any]] = [
     {
         "type": "ad_copy",
         "headline": "Discover Your Next Favourite — Exclusive for You",
@@ -167,16 +169,49 @@ _AD_COPY_VARIANTS: list[dict] = [
     },
 ]
 
-_PRICE_VARIANTS: list[dict] = [
-    {"type": "price_change", "product_name": "Wireless Headphones Pro", "original_price": 129.99, "new_price": 89.99},
-    {"type": "price_change", "product_name": "Running Shoes X500",     "original_price": 99.90,  "new_price": 69.90},
-    {"type": "price_change", "product_name": "Smart Home Starter Kit", "original_price": 199.00, "new_price": 149.00},
+_PRICE_VARIANTS: list[dict[str, Any]] = [
+    {
+        "type": "price_change",
+        "product_name": "Wireless Headphones Pro",
+        "original_price": 129.99,
+        "new_price": 89.99,
+    },
+    {
+        "type": "price_change",
+        "product_name": "Running Shoes X500",
+        "original_price": 99.90,
+        "new_price": 69.90,
+    },
+    {
+        "type": "price_change",
+        "product_name": "Smart Home Starter Kit",
+        "original_price": 199.00,
+        "new_price": 149.00,
+    },
 ]
 
-_PROMO_VARIANTS: list[dict] = [
-    {"type": "promo", "promo_code": "SUMMER20", "discount_value": 20, "discount_type": "percent", "expiry_days": 7},
-    {"type": "promo", "promo_code": "WELCOME10", "discount_value": 10, "discount_type": "fixed",   "expiry_days": 14},
-    {"type": "promo", "promo_code": "FLASH15",  "discount_value": 15, "discount_type": "percent", "expiry_days": 3},
+_PROMO_VARIANTS: list[dict[str, Any]] = [
+    {
+        "type": "promo",
+        "promo_code": "SUMMER20",
+        "discount_value": 20,
+        "discount_type": "percent",
+        "expiry_days": 7,
+    },
+    {
+        "type": "promo",
+        "promo_code": "WELCOME10",
+        "discount_value": 10,
+        "discount_type": "fixed",
+        "expiry_days": 14,
+    },
+    {
+        "type": "promo",
+        "promo_code": "FLASH15",
+        "discount_value": 15,
+        "discount_type": "percent",
+        "expiry_days": 3,
+    },
 ]
 
 _ALL_STIMULI = _AD_COPY_VARIANTS + _PRICE_VARIANTS + _PROMO_VARIANTS
@@ -220,41 +255,50 @@ def _rand_ts(days_ago_max: int = 30) -> datetime:
         hours=random.randint(0, 23),
         minutes=random.randint(0, 59),
     )
-    return datetime.now(timezone.utc) - delta
+    return datetime.now(UTC) - delta
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats(
-    claims: Annotated[object, Depends(require(Permission.SEGMENTS_READ))],
-    db:     DbDep,
+    claims: Annotated[TokenClaims, Depends(require(Permission.SEGMENTS_READ))],
+    db: DbDep,
 ) -> StatsResponse:
     """Return row counts for all tenant tables."""
-    from api.auth.jwt_handler import TokenClaims
-    ct: TokenClaims = claims  # type: ignore[assignment]
 
-    seg_count = (await db.execute(
-        select(func.count()).select_from(SegmentORM).where(SegmentORM.org_id == ct.org_id)
-    )).scalar_one()
+    seg_count = (
+        await db.execute(
+            select(func.count()).select_from(SegmentORM).where(SegmentORM.org_id == claims.org_id)
+        )
+    ).scalar_one()
 
-    cam_count = (await db.execute(
-        select(func.count()).select_from(CampaignORM).where(CampaignORM.org_id == ct.org_id)
-    )).scalar_one()
+    cam_count = (
+        await db.execute(
+            select(func.count()).select_from(CampaignORM).where(CampaignORM.org_id == claims.org_id)
+        )
+    ).scalar_one()
 
-    var_count = (await db.execute(
-        select(func.count()).select_from(CampaignVariantORM).where(
-            CampaignVariantORM.campaign_id.in_(
-                select(CampaignORM.id).where(CampaignORM.org_id == ct.org_id)
+    var_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(CampaignVariantORM)
+            .where(
+                CampaignVariantORM.campaign_id.in_(
+                    select(CampaignORM.id).where(CampaignORM.org_id == claims.org_id)
+                )
             )
         )
-    )).scalar_one()
+    ).scalar_one()
 
-    run_count = (await db.execute(
-        select(func.count()).select_from(SimulationRunORM).where(
-            SimulationRunORM.org_id == ct.org_id
+    run_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(SimulationRunORM)
+            .where(SimulationRunORM.org_id == claims.org_id)
         )
-    )).scalar_one()
+    ).scalar_one()
 
     return StatsResponse(
         segments=seg_count,
@@ -266,11 +310,11 @@ async def get_stats(
 
 @router.post("/seed", response_model=SeedResponse)
 async def seed_database(
-    claims: Annotated[object, Depends(require(Permission.SEGMENTS_WRITE))],
-    db:     DbDep,
-    n_segments:   int = 6,
-    n_campaigns:  int = 2,
-    n_runs:       int = 8,
+    claims: Annotated[TokenClaims, Depends(require(Permission.SEGMENTS_WRITE))],
+    db: DbDep,
+    n_segments: int = 6,
+    n_campaigns: int = 2,
+    n_runs: int = 8,
 ) -> SeedResponse:
     """Insert randomised demo data for the current org.
 
@@ -281,43 +325,40 @@ async def seed_database(
     """
     _guard_non_production()
 
-    from api.auth.jwt_handler import TokenClaims
-    ct: TokenClaims = claims  # type: ignore[assignment]
-
-    n_segments  = max(1, min(n_segments,  6))
+    n_segments = max(1, min(n_segments, 6))
     n_campaigns = max(1, min(n_campaigns, 4))
-    n_runs      = max(1, min(n_runs,     20))
+    n_runs = max(1, min(n_runs, 20))
 
-    templates   = random.sample(_SEGMENT_TEMPLATES, k=n_segments)
-    seg_count   = cam_count = var_count = run_count = 0
+    templates = random.sample(_SEGMENT_TEMPLATES, k=n_segments)
+    seg_count = cam_count = var_count = run_count = 0
     campaign_suffixes = _CAMPAIGN_SUFFIXES.copy()
     random.shuffle(campaign_suffixes)
 
     for i, tmpl in enumerate(templates):
         seg = SegmentORM(
             id=uuid.uuid4(),
-            org_id=ct.org_id,
+            org_id=claims.org_id,
             name=tmpl["name"],
             description=tmpl["description"],
             definition=tmpl["definition"],
             is_stale=random.random() < 0.15,
             last_trained_at=_rand_ts(10) if random.random() > 0.2 else None,
-            created_by=uuid.UUID(ct.sub) if _is_uuid(ct.sub) else None,
+            created_by=uuid.UUID(claims.sub) if _is_uuid(claims.sub) else None,
         )
         db.add(seg)
-        await db.flush()   # materialise segment.id before FK references below
+        await db.flush()  # materialise segment.id before FK references below
         seg_count += 1
 
         for j in range(n_campaigns):
             suffix_idx = (i * n_campaigns + j) % len(campaign_suffixes)
             cam = CampaignORM(
                 id=uuid.uuid4(),
-                org_id=ct.org_id,
+                org_id=claims.org_id,
                 segment_id=seg.id,
                 name=f"{seg.name.split('—')[0].strip()} — {campaign_suffixes[suffix_idx]}",
                 description=f"Targeting {seg.name} with a focused stimulus test.",
                 status=random.choice(["draft", "running", "completed"]),
-                created_by=uuid.UUID(ct.sub) if _is_uuid(ct.sub) else None,
+                created_by=uuid.UUID(claims.sub) if _is_uuid(claims.sub) else None,
             )
             db.add(cam)
             cam_count += 1
@@ -334,14 +375,14 @@ async def seed_database(
                 var_count += 1
 
         for _ in range(n_runs):
-            stim      = random.choice(_ALL_STIMULI)
+            stim = random.choice(_ALL_STIMULI)
             sentiment = random.choices(_SENTIMENTS, weights=_SENTIMENT_WEIGHTS)[0]
-            score     = _rand_score(sentiment)
-            latency   = random.randint(800, 4500)
-            created   = _rand_ts(30)
+            score = _rand_score(sentiment)
+            latency = random.randint(800, 4500)
+            created = _rand_ts(30)
             run = SimulationRunORM(
                 id=uuid.uuid4(),
-                org_id=ct.org_id,
+                org_id=claims.org_id,
                 segment_id=seg.id,
                 stimulus=stim,
                 verbatim_response=random.choice(_VERBATIM_TEMPLATES[sentiment]),
@@ -375,44 +416,40 @@ async def seed_database(
 
 @router.delete("/clear", response_model=ClearResponse)
 async def clear_database(
-    claims: Annotated[object, Depends(require(Permission.ORG_DATA_DELETE))],
-    db:     DbDep,
+    claims: Annotated[TokenClaims, Depends(require(Permission.ORG_DATA_DELETE))],
+    db: DbDep,
 ) -> ClearResponse:
     """Delete all segments, campaigns, variants and simulation runs for the current org."""
     _guard_non_production()
 
-    from api.auth.jwt_handler import TokenClaims
-    ct: TokenClaims = claims  # type: ignore[assignment]
-
     # Runs
     run_result = await db.execute(
-        delete(SimulationRunORM).where(SimulationRunORM.org_id == ct.org_id)
+        delete(SimulationRunORM).where(SimulationRunORM.org_id == claims.org_id)
     )
 
     # Variants (via campaign FK)
-    campaign_ids = (await db.execute(
-        select(CampaignORM.id).where(CampaignORM.org_id == ct.org_id)
-    )).scalars().all()
+    campaign_ids = (
+        (await db.execute(select(CampaignORM.id).where(CampaignORM.org_id == claims.org_id)))
+        .scalars()
+        .all()
+    )
     if campaign_ids:
         await db.execute(
             delete(CampaignVariantORM).where(CampaignVariantORM.campaign_id.in_(campaign_ids))
         )
 
     # Campaigns
-    cam_result = await db.execute(
-        delete(CampaignORM).where(CampaignORM.org_id == ct.org_id)
-    )
+    cam_result = await db.execute(delete(CampaignORM).where(CampaignORM.org_id == claims.org_id))
 
     # Segments
-    seg_result = await db.execute(
-        delete(SegmentORM).where(SegmentORM.org_id == ct.org_id)
-    )
+    seg_result = await db.execute(delete(SegmentORM).where(SegmentORM.org_id == claims.org_id))
 
     await db.flush()
+    await invalidate_org_runs(str(claims.org_id))
 
-    deleted_runs = run_result.rowcount or 0
-    deleted_cams = cam_result.rowcount or 0
-    deleted_segs = seg_result.rowcount or 0
+    deleted_runs = _rowcount(run_result)
+    deleted_cams = _rowcount(cam_result)
+    deleted_segs = _rowcount(seg_result)
 
     return ClearResponse(
         deleted_segments=deleted_segs,
@@ -424,6 +461,12 @@ async def clear_database(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
+def _rowcount(result: Any) -> int:
+    """Rows affected by a bulk DELETE (CursorResult.rowcount; -1/None → 0)."""
+    return max(int(getattr(result, "rowcount", 0) or 0), 0)
+
+
 def _is_uuid(s: str) -> bool:
     try:
         uuid.UUID(s)
@@ -432,7 +475,7 @@ def _is_uuid(s: str) -> bool:
         return False
 
 
-def _variant_name(stim: dict) -> str:
+def _variant_name(stim: dict[str, Any]) -> str:
     t = stim.get("type", "")
     if t == "ad_copy":
         return f"Ad Copy — {stim.get('cta', 'CTA')}"

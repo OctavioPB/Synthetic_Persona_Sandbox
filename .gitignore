@@ -45,6 +45,7 @@ infra/terraform/environments/**/*.tfvars
 .vscode/
 .idea/
 *.swp
+AGENTS.md
 
 # OS
 .DS_Store

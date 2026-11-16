@@ -53,7 +53,7 @@
 
 | Control | Status | Implementation |
 |---------|--------|----------------|
-| CORS restricted to known origins | ✅ | `allow_origins=["http://localhost:5173"]` in dev; override via env in prod |
+| CORS restricted to known origins | ✅ | Localhost dev ports by default; set `CORS_ORIGINS` (comma-separated) in prod |
 | Debug endpoints disabled in prod | ✅ | `POST /auth/dev-token` gated by `AUTH_MODE == "dev"` |
 | Prometheus metrics not public | ⚠️ | `/metrics` endpoint has no auth — should be blocked at network layer in prod |
 | Error messages don't leak internals | ✅ | Generic error messages; stack traces only in server logs |

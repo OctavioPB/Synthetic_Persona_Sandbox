@@ -16,8 +16,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 def main() -> None:
     parser = argparse.ArgumentParser(description="Produce synthetic behavioral events to Kafka.")
     parser.add_argument("--page-views", type=int, default=20, help="Number of page view events")
-    parser.add_argument("--purchases",  type=int, default=5,  help="Number of purchase events")
-    parser.add_argument("--sessions",   type=int, default=10, help="Number of session pairs (start+end)")
+    parser.add_argument("--purchases", type=int, default=5, help="Number of purchase events")
+    parser.add_argument(
+        "--sessions", type=int, default=10, help="Number of session pairs (start+end)"
+    )
     args = parser.parse_args()
 
     producer = FixtureEventProducer()

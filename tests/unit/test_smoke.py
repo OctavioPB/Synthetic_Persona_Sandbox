@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import importlib
 
-
 # ── Import smoke tests ─────────────────────────────────────────────────────────
+
 
 def test_import_stimulus_schema() -> None:
     mod = importlib.import_module("ml.synthetic_data.stimulus_schema")
@@ -89,14 +89,17 @@ def test_import_worker() -> None:
 
 # ── Instantiation smoke tests ──────────────────────────────────────────────────
 
+
 def test_persona_context_builder_instantiates() -> None:
     from ml.synthetic_data.persona_context_builder import PersonaContextBuilder
+
     builder = PersonaContextBuilder()
     assert hasattr(builder, "build_system_prompt")
 
 
 def test_conversion_scorer_instantiates() -> None:
     from ml.synthetic_data.conversion_scorer import ConversionScorer
+
     scorer = ConversionScorer()
     assert hasattr(scorer, "score")
     assert hasattr(scorer, "score_batch")
@@ -104,12 +107,14 @@ def test_conversion_scorer_instantiates() -> None:
 
 def test_holdout_evaluator_instantiates() -> None:
     from ml.evaluation.holdout_evaluator import HoldoutEvaluator
+
     ev = HoldoutEvaluator()
     assert ev.MIN_SAMPLES_FOR_AUC == 10
 
 
 def test_drift_detector_instantiates() -> None:
     from ml.evaluation.drift_detector import DriftDetector
+
     det = DriftDetector(threshold_days=7)
     assert det.threshold_days == 7
 
@@ -120,6 +125,7 @@ def test_stimulus_models_instantiate() -> None:
         PriceChangeStimulus,
         PromoStimulus,
     )
+
     ad = AdCopyStimulus(headline="H", body_copy="B", cta="Buy")
     assert ad.type == "ad_copy"
 
@@ -132,6 +138,7 @@ def test_stimulus_models_instantiate() -> None:
 
 def test_synthetic_response_instantiates() -> None:
     from ml.synthetic_data.persona_inference import SyntheticResponse
+
     r = SyntheticResponse(
         segment_id="s",
         stimulus_id="t",
@@ -144,6 +151,7 @@ def test_synthetic_response_instantiates() -> None:
 
 def test_error_taxonomy_completeness() -> None:
     from api.services.simulation_errors import ERROR_TAXONOMY
+
     # All definitions must have non-empty error_code and valid HTTP status
     for key, defn in ERROR_TAXONOMY.items():
         assert defn.error_code == key, f"Key mismatch: {key} vs {defn.error_code}"
@@ -154,5 +162,6 @@ def test_error_taxonomy_completeness() -> None:
 def test_worker_settings_concurrency() -> None:
     """S6-01: verify max_jobs cap is enforced at the class level."""
     from api.workers.simulation_worker import WorkerSettings
+
     assert WorkerSettings.max_jobs == 5
     assert WorkerSettings.job_timeout == 120

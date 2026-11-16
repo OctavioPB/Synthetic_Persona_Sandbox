@@ -19,6 +19,7 @@ from typing import Annotated
 
 from arq import create_pool
 from arq.connections import ArqRedis, RedisSettings
+from arq.constants import default_queue_name
 from fastapi import Depends
 
 ARQ_REDIS_SETTINGS = RedisSettings(
@@ -27,6 +28,8 @@ ARQ_REDIS_SETTINGS = RedisSettings(
     database=int(os.getenv("REDIS_DB", "0")),
     password=os.getenv("REDIS_PASSWORD") or None,
 )
+
+ARQ_QUEUE_NAME = default_queue_name
 
 _pool: ArqRedis | None = None
 
@@ -43,7 +46,7 @@ async def close_arq_pool() -> None:
     """Close the ARQ pool on application shutdown."""
     global _pool
     if _pool is not None:
-        await _pool.close()
+        await _pool.aclose()
         _pool = None
 
 

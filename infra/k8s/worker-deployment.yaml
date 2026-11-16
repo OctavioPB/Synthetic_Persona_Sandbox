@@ -35,7 +35,15 @@ spec:
                 name: spb-secrets
           livenessProbe:
             exec:
-              command: ["python", "-c", "import redis, os; r=redis.from_url(os.getenv('REDIS_URL','redis://localhost:6379')); r.ping()"]
+              command:
+                - python
+                - -c
+                - >-
+                  import os, redis;
+                  redis.Redis(host=os.getenv('REDIS_HOST', 'localhost'),
+                  port=int(os.getenv('REDIS_PORT', '6379')),
+                  password=os.getenv('REDIS_PASSWORD') or None,
+                  socket_timeout=5).ping()
             initialDelaySeconds: 20
             periodSeconds: 30
             failureThreshold: 3

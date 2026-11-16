@@ -10,7 +10,7 @@ OPB AI Mastery Lab stack. Do not change without explicit discussion.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sentence_transformers import SentenceTransformer
@@ -42,8 +42,8 @@ class SegmentEmbeddingService:
         store: QdrantSegmentStore | None = None,
         model: str = _MODEL_NAME,
     ) -> None:
-        self._store  = store or QdrantSegmentStore()
-        self._model  = SentenceTransformer(model)
+        self._store = store or QdrantSegmentStore()
+        self._model = SentenceTransformer(model)
         self._store.ensure_collection()
         logger.info("SegmentEmbeddingService ready (model=%s).", model)
 
@@ -67,14 +67,14 @@ class SegmentEmbeddingService:
 
         stats = matrix.aggregate_stats()
         payload: dict[str, Any] = {
-            "segment_id":             matrix.segment_id,
-            "segment_name":           matrix.segment_name,
-            "user_count":             len(matrix),
-            "window_days":            matrix.window_days,
-            "category_affinities":    definition.category_affinities,
-            "text_description":       text,
-            "feature_stats":          stats,
-            "embedded_at":            datetime.utcnow().isoformat(),
+            "segment_id": matrix.segment_id,
+            "segment_name": matrix.segment_name,
+            "user_count": len(matrix),
+            "window_days": matrix.window_days,
+            "category_affinities": definition.category_affinities,
+            "text_description": text,
+            "feature_stats": stats,
+            "embedded_at": datetime.now(UTC).isoformat(),
         }
 
         self._store.upsert_segment(
@@ -86,7 +86,7 @@ class SegmentEmbeddingService:
             "Embedded segment '%s': %d users, vector norm=%.4f.",
             matrix.segment_name,
             len(matrix),
-            sum(x ** 2 for x in vector) ** 0.5,
+            sum(x**2 for x in vector) ** 0.5,
         )
         return vector
 
@@ -99,4 +99,5 @@ class SegmentEmbeddingService:
         Returns:
             384-dim normalized embedding vector.
         """
-        return self._model.encode(text, normalize_embeddings=True).tolist()
+        vector: list[float] = self._model.encode(text, normalize_embeddings=True).tolist()
+        return vector

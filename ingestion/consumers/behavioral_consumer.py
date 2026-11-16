@@ -12,12 +12,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import cast
 
 import psycopg2
 import psycopg2.extras
 import redis
-from tenacity import retry, stop_after_attempt, wait_exponential
+from pydantic import ValidationError
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ingestion.anonymizer import AnonymizerService
 from ingestion.consumers.base_consumer import BaseKafkaConsumer, ProcessingResult
@@ -37,11 +39,12 @@ logger = logging.getLogger(__name__)
 _PROFILE_KEY = "profile:{}"
 
 
-def _redis_client() -> redis.Redis:  # type: ignore[type-arg]
+def _redis_client() -> redis.Redis:
     return redis.Redis(
         host=os.getenv("REDIS_HOST", "localhost"),
         port=int(os.getenv("REDIS_PORT", "6379")),
         db=int(os.getenv("REDIS_DB", "0")),
+        password=os.getenv("REDIS_PASSWORD") or None,
         decode_responses=True,
     )
 
@@ -92,10 +95,22 @@ class BehavioralEventConsumer(BaseKafkaConsumer):
             elif topic == TOPIC_SESSIONS:
                 return self._handle_session(record)
             else:
-                return ProcessingResult(success=False, error_type="UnknownTopic", error_message=f"No handler for topic: {topic}")
+                return ProcessingResult(
+                    success=False,
+                    error_type="UnknownTopic",
+                    error_message=f"No handler for topic: {topic}",
+                )
+        except (ValidationError, ValueError, KeyError) as exc:
+            # Schema-valid Avro that fails domain validation (e.g. unknown enum value).
+            logger.warning("Invalid %s record: %s", topic, exc)
+            return ProcessingResult(
+                success=False, error_type="ValidationError", error_message=str(exc)
+            )
         except psycopg2.Error as exc:
             logger.error("PostgreSQL error processing %s: %s", topic, exc)
-            return ProcessingResult(success=False, error_type="PostgresError", error_message=str(exc))
+            return ProcessingResult(
+                success=False, error_type="PostgresError", error_message=str(exc)
+            )
         except redis.RedisError as exc:
             logger.error("Redis error processing %s: %s", topic, exc)
             return ProcessingResult(success=False, error_type="RedisError", error_message=str(exc))
@@ -106,7 +121,7 @@ class BehavioralEventConsumer(BaseKafkaConsumer):
         raw = RawPageViewEvent(**record)
         anon = self._anonymizer.anonymize_page_view(raw)
 
-        self._insert_behavioral_event(
+        inserted = self._insert_behavioral_event(
             event_id=anon.event_id,
             event_type="page_view",
             user_id_hash=anon.user_id_hash,
@@ -114,14 +129,15 @@ class BehavioralEventConsumer(BaseKafkaConsumer):
             timestamp_ms=anon.timestamp_ms,
             payload=anon.model_dump(),
         )
-        self._update_profile_page_view(anon.user_id_hash, anon.category, anon.timestamp_ms)
+        if inserted:
+            self._update_profile_page_view(anon.user_id_hash, anon.category, anon.timestamp_ms)
         return ProcessingResult(success=True)
 
     def _handle_purchase(self, record: dict) -> ProcessingResult:  # type: ignore[type-arg]
         raw = RawPurchaseEvent(**record)
         anon = self._anonymizer.anonymize_purchase(raw)
 
-        self._insert_behavioral_event(
+        inserted = self._insert_behavioral_event(
             event_id=anon.event_id,
             event_type="purchase",
             user_id_hash=anon.user_id_hash,
@@ -129,7 +145,8 @@ class BehavioralEventConsumer(BaseKafkaConsumer):
             timestamp_ms=anon.timestamp_ms,
             payload=anon.model_dump(),
         )
-        self._update_profile_purchase(anon.user_id_hash, anon.amount, anon.category, anon.timestamp_ms)
+        if inserted:
+            self._update_profile_purchase(anon.user_id_hash, anon.amount, anon.timestamp_ms)
         return ProcessingResult(success=True)
 
     def _handle_session(self, record: dict) -> ProcessingResult:  # type: ignore[type-arg]
@@ -139,21 +156,26 @@ class BehavioralEventConsumer(BaseKafkaConsumer):
         raw = RawSessionEvent(**record_copy)
         anon = self._anonymizer.anonymize_session(raw)
 
-        self._insert_behavioral_event(
+        inserted = self._insert_behavioral_event(
             event_id=anon.event_id,
             event_type="session",
             user_id_hash=anon.user_id_hash,
             session_id=anon.session_id,
             timestamp_ms=anon.timestamp_ms,
-            payload=anon.model_dump(),
+            payload=anon.model_dump(mode="json"),
         )
-        if anon.event_type == SessionEventType.SESSION_START:
+        if inserted and anon.event_type == SessionEventType.SESSION_START:
             self._update_profile_session(anon.user_id_hash, anon.timestamp_ms)
         return ProcessingResult(success=True)
 
     # ── PostgreSQL writes ──────────────────────────────────────────────────────
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+    @retry(
+        retry=retry_if_exception_type(psycopg2.OperationalError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
+    )
     def _insert_behavioral_event(
         self,
         event_id: str,
@@ -162,17 +184,40 @@ class BehavioralEventConsumer(BaseKafkaConsumer):
         session_id: str,
         timestamp_ms: int,
         payload: dict,  # type: ignore[type-arg]
-    ) -> None:
-        ts = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+    ) -> bool:
+        """Insert one event row.
+
+        Returns:
+            True if the row was inserted, False if event_id already existed
+            (a Kafka redelivery). Callers skip the Redis profile update for
+            duplicates so replays do not double-count.
+        """
+        if self._pg.closed:
+            self._pg = _pg_conn()
+        ts = datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC)
         sql = """
             INSERT INTO behavioral_events
                 (event_id, event_type, user_id_hash, session_id, timestamp, payload)
             VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (event_id) DO NOTHING
         """
-        with self._pg.cursor() as cur:
-            cur.execute(sql, (event_id, event_type, user_id_hash, session_id, ts, json.dumps(payload)))
-        self._pg.commit()
+        try:
+            with self._pg.cursor() as cur:
+                cur.execute(
+                    sql, (event_id, event_type, user_id_hash, session_id, ts, json.dumps(payload))
+                )
+                inserted: bool = cur.rowcount == 1
+            self._pg.commit()
+        except psycopg2.Error:
+            # Leave the connection usable: a failed statement aborts the
+            # transaction and every later statement would fail until rollback.
+            if not self._pg.closed:
+                try:
+                    self._pg.rollback()
+                except psycopg2.Error:
+                    self._pg.close()
+            raise
+        return inserted
 
     # ── Redis profile upserts ──────────────────────────────────────────────────
 
@@ -182,32 +227,28 @@ class BehavioralEventConsumer(BaseKafkaConsumer):
         key = _PROFILE_KEY.format(user_id_hash)
         pipe = self._redis.pipeline()
         pipe.hincrby(key, "page_views_total", 1)
-        pipe.hset(key, "last_seen", datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat())
+        pipe.hset(key, "last_seen", datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC).isoformat())
         if category:
             # Append category to a JSON list stored in a hash field
-            raw_cats = self._redis.hget(key, "categories_viewed") or "[]"
-            cats: list[str] = json.loads(raw_cats)
+            raw_cats = cast("str | None", self._redis.hget(key, "categories_viewed"))
+            cats: list[str] = json.loads(raw_cats or "[]")
             if category not in cats:
                 cats.append(category)
             pipe.hset(key, "categories_viewed", json.dumps(cats))
         pipe.execute()
 
-    def _update_profile_purchase(
-        self, user_id_hash: str, amount: float, category: str, timestamp_ms: int
-    ) -> None:
+    def _update_profile_purchase(self, user_id_hash: str, amount: float, timestamp_ms: int) -> None:
         key = _PROFILE_KEY.format(user_id_hash)
         pipe = self._redis.pipeline()
         pipe.hincrby(key, "purchase_count", 1)
-        # Accumulate total spend as string-encoded float
-        existing = self._redis.hget(key, "purchase_total_amount")
-        new_total = (float(existing) if existing else 0.0) + amount
-        pipe.hset(key, "purchase_total_amount", f"{new_total:.2f}")
-        pipe.hset(key, "last_seen", datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat())
+        # Atomic server-side increment (no read-modify-write race between consumers)
+        pipe.hincrbyfloat(key, "purchase_total_amount", round(amount, 2))
+        pipe.hset(key, "last_seen", datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC).isoformat())
         pipe.execute()
 
     def _update_profile_session(self, user_id_hash: str, timestamp_ms: int) -> None:
         key = _PROFILE_KEY.format(user_id_hash)
         pipe = self._redis.pipeline()
         pipe.hincrby(key, "session_count", 1)
-        pipe.hset(key, "last_seen", datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat())
+        pipe.hset(key, "last_seen", datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC).isoformat())
         pipe.execute()

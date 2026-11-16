@@ -20,29 +20,31 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from api.services.db import Base
 
-
 # ── SQLAlchemy ORM model ───────────────────────────────────────────────────────
+
 
 class SimulationRunORM(Base):
     __tablename__ = "simulation_runs"
 
-    id:         Mapped[uuid.UUID]           = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id:     Mapped[uuid.UUID | None]    = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True)
-    segment_id: Mapped[uuid.UUID]           = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True
+    )
+    segment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
     # The full stimulus object stored as JSONB so any type is supported
     stimulus: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
     # Persona response fields
     verbatim_response: Mapped[str | None] = mapped_column(String, nullable=True)
-    sentiment: Mapped[str | None]         = mapped_column(String, nullable=True)
+    sentiment: Mapped[str | None] = mapped_column(String, nullable=True)
     likelihood_to_convert: Mapped[float | None] = mapped_column(Float, nullable=True)
-    conversion_score: Mapped[float | None]      = mapped_column(Float, nullable=True)
+    conversion_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Full LLM response blob (key_factors, raw_text, token counts, latency)
     llm_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
-    status: Mapped[str]     = mapped_column(String, nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
     model_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -50,6 +52,7 @@ class SimulationRunORM(Base):
 
 
 # ── Pydantic request/response models ──────────────────────────────────────────
+
 
 class SimulateRunRequest(BaseModel):
     """Request body for POST /simulate/run."""
@@ -104,8 +107,8 @@ class SimulationRunResponse(BaseModel):
 class SimulationRunListResponse(BaseModel):
     items: list[SimulationRunResponse]
     total: int
-    page:  int
-    size:  int
+    page: int
+    size: int
 
 
 # ── Status literals ────────────────────────────────────────────────────────────

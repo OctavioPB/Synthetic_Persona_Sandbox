@@ -26,12 +26,31 @@ from ingestion.schemas.events import (
 
 logger = logging.getLogger(__name__)
 
-# Read salt from env; fail loudly in production if not set.
-_SALT = os.getenv("PII_SALT", "dev-only-salt-change-in-prod").encode()
+_DEV_SALT = "dev-only-salt-change-in-prod"
 
 
-def _hmac_sha256(value: str) -> str:
-    """Return a deterministic hex digest of `value` keyed with the project salt."""
+def _load_salt() -> bytes:
+    """Read the HMAC salt from PII_SALT; fail loudly in production if unset.
+
+    With the public development salt, user-id hashes can be reversed by a
+    dictionary attack, which defeats the anonymization guarantee.
+    """
+    salt = os.getenv("PII_SALT", _DEV_SALT)
+    if os.getenv("ENV", "development").lower() == "production" and salt == _DEV_SALT:
+        raise RuntimeError("PII_SALT must be set to a secret value when ENV=production.")
+    return salt.encode()
+
+
+_SALT = _load_salt()
+
+
+def hash_identifier(value: str) -> str:
+    """Return a deterministic hex digest of `value` keyed with the project salt.
+
+    This is the single hashing routine for user identifiers: the ingestion
+    pipeline uses it to anonymize events and the API uses it to look up the
+    resulting profile keys.
+    """
     return hmac.new(_SALT, value.encode(), hashlib.sha256).hexdigest()
 
 
@@ -64,7 +83,7 @@ class AnonymizerService:
         """
         return AnonPageViewEvent(
             event_id=event.event_id,
-            user_id_hash=_hmac_sha256(event.user_id),
+            user_id_hash=hash_identifier(event.user_id),
             session_id=event.session_id,
             timestamp_ms=event.timestamp_ms,
             url=event.url,
@@ -85,8 +104,8 @@ class AnonymizerService:
         """
         return AnonPurchaseEvent(
             event_id=event.event_id,
-            user_id_hash=_hmac_sha256(event.user_id),
-            email_hash=_hmac_sha256(event.email),
+            user_id_hash=hash_identifier(event.user_id),
+            email_hash=hash_identifier(event.email),
             session_id=event.session_id,
             timestamp_ms=event.timestamp_ms,
             order_id=event.order_id,
@@ -109,7 +128,7 @@ class AnonymizerService:
         """
         return AnonSessionEvent(
             event_id=event.event_id,
-            user_id_hash=_hmac_sha256(event.user_id),
+            user_id_hash=hash_identifier(event.user_id),
             session_id=event.session_id,
             timestamp_ms=event.timestamp_ms,
             event_type=event.event_type,

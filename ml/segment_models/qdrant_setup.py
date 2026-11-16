@@ -17,8 +17,8 @@ from qdrant_client.http import models as qmodels
 logger = logging.getLogger(__name__)
 
 COLLECTION_NAME = "persona_segments"
-VECTOR_SIZE     = 384   # all-MiniLM-L6-v2 output dimension
-DISTANCE        = qmodels.Distance.COSINE
+VECTOR_SIZE = 384  # all-MiniLM-L6-v2 output dimension
+DISTANCE = qmodels.Distance.COSINE
 
 
 def get_qdrant_client() -> QdrantClient:
@@ -53,7 +53,12 @@ class QdrantSegmentStore:
             collection_name=COLLECTION_NAME,
             vectors_config=qmodels.VectorParams(size=VECTOR_SIZE, distance=DISTANCE),
         )
-        logger.info("Created Qdrant collection '%s' (dim=%d, dist=%s).", COLLECTION_NAME, VECTOR_SIZE, DISTANCE)
+        logger.info(
+            "Created Qdrant collection '%s' (dim=%d, dist=%s).",
+            COLLECTION_NAME,
+            VECTOR_SIZE,
+            DISTANCE,
+        )
 
     def upsert_segment(
         self,
@@ -97,14 +102,14 @@ class QdrantSegmentStore:
         Returns:
             List of dicts with keys: id, score, payload.
         """
-        results = self._client.search(
+        response = self._client.query_points(
             collection_name=COLLECTION_NAME,
-            query_vector=query_vector,
+            query=query_vector,
             limit=top_k,
             score_threshold=score_threshold,
             with_payload=True,
         )
-        return [{"id": r.id, "score": r.score, "payload": r.payload} for r in results]
+        return [{"id": r.id, "score": r.score, "payload": r.payload} for r in response.points]
 
     def delete_segment(self, segment_id: str) -> None:
         """Remove a segment vector from the collection."""

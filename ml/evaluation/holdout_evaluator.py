@@ -16,13 +16,12 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 try:
-    from sklearn.metrics import roc_auc_score, average_precision_score
+    from sklearn.metrics import average_precision_score, roc_auc_score
+
     _SKLEARN_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _SKLEARN_AVAILABLE = False
-    logger.warning(
-        "scikit-learn not installed. HoldoutEvaluator will raise on evaluate()."
-    )
+    logger.warning("scikit-learn not installed. HoldoutEvaluator will raise on evaluate().")
 
 
 @dataclass
@@ -40,16 +39,14 @@ class HoldoutSample:
     segment_id: str
     stimulus_id: str
     predicted: float
-    actual: int                             # 0 or 1
+    actual: int  # 0 or 1
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.actual not in (0, 1):
             raise ValueError(f"actual must be 0 or 1, got {self.actual}.")
         if not 0.0 <= self.predicted <= 1.0:
-            raise ValueError(
-                f"predicted must be in [0, 1], got {self.predicted}."
-            )
+            raise ValueError(f"predicted must be in [0, 1], got {self.predicted}.")
 
 
 @dataclass
@@ -61,8 +58,8 @@ class EvaluationReport:
     auc_pr: float
     mean_predicted: float
     mean_actual: float
-    positive_rate: float            # fraction of actual=1 in holdout
-    calibration_error: float        # |mean_predicted - mean_actual|, lower is better
+    positive_rate: float  # fraction of actual=1 in holdout
+    calibration_error: float  # |mean_predicted - mean_actual|, lower is better
 
     def __str__(self) -> str:
         return (
@@ -122,7 +119,7 @@ class HoldoutEvaluator:
                 f"got {len(samples)}."
             )
 
-        y_true  = [s.actual    for s in samples]
+        y_true = [s.actual for s in samples]
         y_score = [s.predicted for s in samples]
 
         unique_classes = set(y_true)
@@ -133,11 +130,11 @@ class HoldoutEvaluator:
             )
 
         auc_roc = float(roc_auc_score(y_true, y_score))
-        auc_pr  = float(average_precision_score(y_true, y_score))
+        auc_pr = float(average_precision_score(y_true, y_score))
 
         n = len(samples)
         mean_predicted = sum(y_score) / n
-        mean_actual    = sum(y_true)  / n
+        mean_actual = sum(y_true) / n
 
         report = EvaluationReport(
             n_samples=n,
@@ -151,13 +148,14 @@ class HoldoutEvaluator:
 
         logger.info(
             "HoldoutEvaluator: n=%d AUC-ROC=%.4f AUC-PR=%.4f cal_error=%.4f",
-            n, auc_roc, auc_pr, report.calibration_error,
+            n,
+            auc_roc,
+            auc_pr,
+            report.calibration_error,
         )
         return report
 
-    def evaluate_by_segment(
-        self, samples: list[HoldoutSample]
-    ) -> dict[str, EvaluationReport]:
+    def evaluate_by_segment(self, samples: list[HoldoutSample]) -> dict[str, EvaluationReport]:
         """Compute per-segment evaluation reports.
 
         Segments with fewer than MIN_SAMPLES_FOR_AUC samples are skipped with
@@ -175,7 +173,9 @@ class HoldoutEvaluator:
             if len(seg_samples) < self.MIN_SAMPLES_FOR_AUC:
                 logger.warning(
                     "Skipping segment %s: only %d samples (need %d).",
-                    seg_id, len(seg_samples), self.MIN_SAMPLES_FOR_AUC,
+                    seg_id,
+                    len(seg_samples),
+                    self.MIN_SAMPLES_FOR_AUC,
                 )
                 continue
             try:

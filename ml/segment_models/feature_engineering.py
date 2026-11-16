@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import psycopg2
@@ -52,18 +52,14 @@ WHERE timestamp >= %(since)s
       OR payload->>'category' = ANY(%(categories)s::text[])
   )
 GROUP BY user_id_hash
-HAVING COUNT(*) > 0
 """
-
-_MIN_PURCHASE_FILTER = " AND purchase_count >= %(min_purchase_count)s"
-_MIN_PAGEVIEW_FILTER = " AND page_view_count >= %(min_page_views)s"
 
 
 def _build_query(definition: SegmentDefinition) -> tuple[str, dict[str, Any]]:
     """Build the feature extraction SQL and its parameter dict."""
-    sql    = _FEATURE_SQL
+    sql = _FEATURE_SQL
     params: dict[str, Any] = {
-        "since":      datetime.now(tz=timezone.utc) - timedelta(days=definition.purchase_history_days),
+        "since": datetime.now(tz=UTC) - timedelta(days=definition.purchase_history_days),
         "categories": definition.category_affinities or None,
     }
     # Wrap in a subquery when post-aggregate filters are needed
@@ -100,7 +96,9 @@ class FeatureEngineeringPipeline:
         self._conn = conn or _pg_conn()
         self._owns_conn = conn is None
 
-    def run(self, segment_id: str, segment_name: str, definition: SegmentDefinition) -> SegmentFeatureMatrix:
+    def run(
+        self, segment_id: str, segment_name: str, definition: SegmentDefinition
+    ) -> SegmentFeatureMatrix:
         """Execute the feature extraction pipeline for one segment.
 
         Args:

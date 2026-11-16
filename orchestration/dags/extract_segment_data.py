@@ -25,10 +25,10 @@ from airflow.models.param import Param
 logger = logging.getLogger(__name__)
 
 DEFAULT_ARGS = {
-    "owner":           "spb-ml",
+    "owner": "spb-ml",
     "depends_on_past": False,
-    "retries":         2,
-    "retry_delay":     timedelta(minutes=5),
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
 }
 
 
@@ -117,7 +117,7 @@ def extract_segment_data_dag() -> None:
         )
 
         definition = SegmentDefinition.model_validate_json(segment_info["definition"])
-        matrix     = SegmentFeatureMatrix.from_dict(matrix_dict)
+        matrix = SegmentFeatureMatrix.from_dict(matrix_dict)
 
         service = SegmentEmbeddingService()
         service.encode_and_store(matrix, definition)
@@ -153,10 +153,10 @@ def extract_segment_data_dag() -> None:
     def get_segment_id(**context: object) -> str:
         return str(context["params"]["segment_id"])  # type: ignore[index]
 
-    sid           = get_segment_id()
-    segment_info  = fetch_segment(sid)
-    matrix_dict   = run_feature_engineering(segment_info)
-    segment_id    = generate_embedding(segment_info, matrix_dict)
+    sid = get_segment_id()
+    segment_info = fetch_segment(sid)
+    matrix_dict = run_feature_engineering(segment_info)
+    segment_id = generate_embedding(segment_info, matrix_dict)
     update_segment_metadata(segment_id)
 
 

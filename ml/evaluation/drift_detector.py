@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import psycopg2
 
@@ -27,12 +27,16 @@ logger = logging.getLogger(__name__)
 STALE_THRESHOLD_DAYS = int(os.getenv("SEGMENT_STALE_THRESHOLD_DAYS", "7"))
 
 
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+
 @dataclass
 class StaleSegment:
     """Metadata about a segment that has exceeded the staleness threshold."""
 
-    id:              str
-    name:            str
+    id: str
+    name: str
     last_trained_at: datetime | None
     days_since_trained: float
 
@@ -42,9 +46,9 @@ class DriftReport:
     """Summary of a drift detection scan."""
 
     scanned_count: int
-    stale_count:   int
+    stale_count: int
     stale_segments: list[StaleSegment] = field(default_factory=list)
-    marked_count:   int = 0
+    marked_count: int = 0
     threshold_days: int = STALE_THRESHOLD_DAYS
 
     def __str__(self) -> str:
@@ -53,11 +57,7 @@ class DriftReport:
             f"marked={self.marked_count} threshold={self.threshold_days}d"
         ]
         for seg in self.stale_segments:
-            trained = (
-                f"{seg.days_since_trained:.1f} days ago"
-                if seg.last_trained_at
-                else "never"
-            )
+            trained = f"{seg.days_since_trained:.1f} days ago" if seg.last_trained_at else "never"
             lines.append(f"  - {seg.name} ({seg.id}): last trained {trained}")
         return "\n".join(lines)
 
@@ -79,10 +79,10 @@ class DriftDetector:
     ) -> None:
         self.threshold_days = threshold_days
         self._conn_params = {
-            "host":     host     or os.getenv("POSTGRES_HOST", "localhost"),
-            "port":     port     or int(os.getenv("POSTGRES_PORT", "5432")),
-            "dbname":   dbname   or os.getenv("POSTGRES_DB", "synthetic_persona"),
-            "user":     user     or os.getenv("POSTGRES_USER", "spb_user"),
+            "host": host or os.getenv("POSTGRES_HOST", "localhost"),
+            "port": port or int(os.getenv("POSTGRES_PORT", "5432")),
+            "dbname": dbname or os.getenv("POSTGRES_DB", "synthetic_persona"),
+            "user": user or os.getenv("POSTGRES_USER", "spb_user"),
             "password": password or os.getenv("POSTGRES_PASSWORD", "changeme"),
         }
 
@@ -92,13 +92,14 @@ class DriftDetector:
         Returns:
             DriftReport listing all stale segments.
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(days=self.threshold_days)
+        cutoff = datetime.now(UTC) - timedelta(days=self.threshold_days)
 
         conn = psycopg2.connect(**self._conn_params)
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT COUNT(*) FROM segments")
-                total: int = cur.fetchone()[0]  # type: ignore[index]
+                count_row = cur.fetchone()
+                total: int = count_row[0] if count_row else 0
 
                 cur.execute(
                     """
@@ -114,20 +115,21 @@ class DriftDetector:
         finally:
             conn.close()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stale: list[StaleSegment] = []
         for row in rows:
             seg_id, name, trained_at = row
             days = (
-                (now - trained_at.replace(tzinfo=timezone.utc)).total_seconds() / 86400
-                if trained_at else float("inf")
+                (now - _as_utc(trained_at)).total_seconds() / 86400 if trained_at else float("inf")
             )
-            stale.append(StaleSegment(
-                id=seg_id,
-                name=name,
-                last_trained_at=trained_at,
-                days_since_trained=days,
-            ))
+            stale.append(
+                StaleSegment(
+                    id=seg_id,
+                    name=name,
+                    last_trained_at=trained_at,
+                    days_since_trained=days,
+                )
+            )
 
         report = DriftReport(
             scanned_count=total,
@@ -137,7 +139,9 @@ class DriftDetector:
         )
         logger.info(
             "Drift scan: %d/%d segments are stale (threshold=%dd).",
-            len(stale), total, self.threshold_days,
+            len(stale),
+            total,
+            self.threshold_days,
         )
         return report
 

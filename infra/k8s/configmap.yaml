@@ -9,6 +9,7 @@ data:
   LOG_LEVEL: "INFO"
   AUTH_MODE: "production"
   AUTH_REQUIRED: "true"
+  CORS_ORIGINS: "https://app.syntheticpersonasandbox.com"
 
   # Database
   POSTGRES_HOST: "postgres.spb.svc.cluster.local"

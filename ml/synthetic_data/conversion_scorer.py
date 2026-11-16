@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 _SENTIMENT_NUDGE: dict[str, float] = {
     "positive": +0.05,
-    "neutral":   0.00,
+    "neutral": 0.00,
     "negative": -0.08,
 }
 
@@ -51,7 +51,10 @@ class ConversionScorer:
         if nudge != 0.0:
             logger.debug(
                 "ConversionScorer: base=%.3f sentiment=%s nudge=%+.2f → final=%.3f",
-                response.likelihood_to_convert, response.sentiment, nudge, final,
+                response.likelihood_to_convert,
+                response.sentiment,
+                nudge,
+                final,
             )
 
         return final

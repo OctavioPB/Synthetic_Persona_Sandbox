@@ -83,7 +83,7 @@ class PersonaContextBuilder:
         Returns:
             A multi-paragraph system prompt string, ready for the Claude API.
         """
-        demographics    = self._format_demographics(definition)
+        demographics = self._format_demographics(definition)
         behavioral_stats = self._format_behavioral(feature_stats, user_count)
         category_interests = self._format_categories(definition.get("category_affinities", []))
 
@@ -97,7 +97,8 @@ class PersonaContextBuilder:
         )
         logger.debug(
             "Built system prompt for '%s' (~%d tokens).",
-            segment_name, len(prompt) // 4,
+            segment_name,
+            len(prompt) // 4,
         )
         return prompt
 
@@ -107,40 +108,46 @@ class PersonaContextBuilder:
     def _format_demographics(definition: dict[str, Any]) -> str:
         lines = []
         age_range = definition.get("age_range")
-        geo       = definition.get("geo")
-        window    = definition.get("purchase_history_days", 90)
+        geo = definition.get("geo")
+        window = definition.get("purchase_history_days", 90)
 
         if age_range:
-            lines.append(f"- Age range: {age_range.get('min_age', '?')}–{age_range.get('max_age', '?')} years")
+            lines.append(
+                f"- Age range: {age_range.get('min_age', '?')}–{age_range.get('max_age', '?')} years"
+            )
         if geo:
-            location = ", ".join(filter(None, [geo.get("city"), geo.get("region"), geo.get("country")]))
+            location = ", ".join(
+                filter(None, [geo.get("city"), geo.get("region"), geo.get("country")])
+            )
             if location:
                 lines.append(f"- Location: {location}")
+        if not lines:
+            lines.append("- No specific demographic filters defined")
         lines.append(f"- Behavioral data window: last {window} days")
-        return "\n".join(lines) if lines else "- No specific demographic filters defined"
+        return "\n".join(lines)
 
     @staticmethod
-    def _format_behavioral(
-        stats: dict[str, float] | None, user_count: int
-    ) -> str:
+    def _format_behavioral(stats: dict[str, float] | None, user_count: int) -> str:
         if not stats:
             return "- Behavioral data not yet available (segment needs training)"
 
-        freq  = stats.get("purchase_frequency_mean", 0)
-        bask  = stats.get("avg_basket_size_mean", 0)
-        sess  = stats.get("session_depth_mean", 0)
-        conv  = stats.get("conversion_rate_mean", 0)
-        div   = stats.get("category_diversity_mean", 0)
-        rec   = stats.get("recency_days_mean", 0)
+        freq = stats.get("purchase_frequency_mean", 0)
+        bask = stats.get("avg_basket_size_mean", 0)
+        sess = stats.get("session_depth_mean", 0)
+        conv = stats.get("conversion_rate_mean", 0)
+        div = stats.get("category_diversity_mean", 0)
+        rec = stats.get("recency_days_mean", 0)
 
-        return "\n".join([
-            f"- Purchase frequency: {freq:.3f} purchases/day ({freq * 30:.1f}/month)",
-            f"- Average basket size: ${bask:.2f}",
-            f"- Session depth: {sess:.1f} pages per visit",
-            f"- Conversion rate: {conv:.1%} of sessions lead to purchase",
-            f"- Category diversity: explores {div:.1f} different categories on average",
-            f"- Recency: last active {rec:.0f} days ago on average",
-        ])
+        return "\n".join(
+            [
+                f"- Purchase frequency: {freq:.3f} purchases/day ({freq * 30:.1f}/month)",
+                f"- Average basket size: ${bask:.2f}",
+                f"- Session depth: {sess:.1f} pages per visit",
+                f"- Conversion rate: {conv:.1%} of sessions lead to purchase",
+                f"- Category diversity: explores {div:.1f} different categories on average",
+                f"- Recency: last active {rec:.0f} days ago on average",
+            ]
+        )
 
     @staticmethod
     def _format_categories(categories: list[str]) -> str:
