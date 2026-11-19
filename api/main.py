@@ -85,7 +85,8 @@ app = FastAPI(
         "url": "https://github.com/opb/synthetic-persona-sandbox",
     },
     license_info={
-        "name": "MIT",
+        "name": "Proprietary",
+        "url": "https://github.com/opb/synthetic-persona-sandbox/blob/main/LICENSE",
     },
     openapi_tags=[
         {"name": "admin", "description": "Seed and clear database — dev/staging only."},

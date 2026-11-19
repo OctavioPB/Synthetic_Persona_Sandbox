@@ -30,6 +30,10 @@ airflow.cfg
 # Node / Dashboard
 dashboard/node_modules/
 dashboard/dist/
+dashboard/storybook-static/
+dashboard/*.tsbuildinfo
+dashboard/playwright-report/
+dashboard/test-results/
 dashboard/.vite/
 
 # Terraform

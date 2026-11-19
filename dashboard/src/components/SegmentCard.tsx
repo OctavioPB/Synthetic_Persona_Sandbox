@@ -1,23 +1,11 @@
 import React from 'react'
+import type { Segment } from '../services/api'
 
-export interface Segment {
-  id: string
-  name: string
-  description: string | null
-  definition: {
-    category_affinities: string[]
-    purchase_history_days: number
-    age_range?: { min_age: number; max_age: number } | null
-    geo?: { country?: string | null; city?: string | null } | null
-  }
-  is_stale: boolean
-  last_trained_at: string | null
-  created_at: string
-}
+export type { Segment }
 
 interface SegmentCardProps {
   segment: Segment
-  onView: (id: string) => void
+  onView: (segment: Segment) => void
 }
 
 const card: React.CSSProperties = {
@@ -99,8 +87,8 @@ export default function SegmentCard({ segment, onView }: SegmentCardProps): Reac
   const age  = segment.definition.age_range
 
   return (
-    <div style={card} onClick={() => onView(segment.id)} role="button" tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onView(segment.id)}>
+    <div style={card} onClick={() => onView(segment)} role="button" tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onView(segment)}>
       <div style={topBar} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <span style={segmentName}>{segment.name}</span>

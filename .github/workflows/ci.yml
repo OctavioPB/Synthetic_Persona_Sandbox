@@ -5,22 +5,39 @@ on:
     branches: [main, develop]
   push:
     branches: [main, develop]
+  workflow_dispatch:
+
+# A newer push to the same branch/PR supersedes the run in progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: CI only reads the repository.
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
 
 jobs:
   # ── Python lint & type-check ───────────────────────────────────────────────
   python-lint:
     name: Python — Ruff + Mypy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Install dev dependencies
         run: uv sync --extra dev
@@ -34,58 +51,29 @@ jobs:
       - name: Mypy type check
         run: uv run mypy api/ ingestion/ ml/
 
-  # ── Python tests ──────────────────────────────────────────────────────────
+  # ── Python unit tests (no external services needed) ────────────────────────
   python-tests:
-    name: Python — Pytest
+    name: Python — Unit tests
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: synthetic_persona_test
-          POSTGRES_USER: spb_user
-          POSTGRES_PASSWORD: changeme
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7.2-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Install dependencies
         run: uv sync --extra dev
 
       - name: Run unit tests
         env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: synthetic_persona_test
-          POSTGRES_USER: spb_user
-          POSTGRES_PASSWORD: changeme
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
           ENV: test
         run: uv run pytest tests/unit/ -v --tb=short
 
@@ -93,16 +81,19 @@ jobs:
   schema-validation:
     name: Avro Schemas — Parse & Validate
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Install dependencies
         run: uv sync --extra dev
@@ -127,6 +118,7 @@ jobs:
   integration-regression:
     name: Integration — Regression Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16-alpine
@@ -152,38 +144,53 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: synthetic_persona_test
+      POSTGRES_USER: spb_user
+      POSTGRES_PASSWORD: changeme
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      AUTH_REQUIRED: "false"
+      AUTH_MODE: "dev"
+      ENV: test
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Run regression tests (local_only + standard)
+      # The service container starts empty; the tests need the real schema.
+      - name: Apply database migrations
         env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: synthetic_persona_test
-          POSTGRES_USER: spb_user
-          POSTGRES_PASSWORD: changeme
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          AUTH_REQUIRED: "false"
-          AUTH_MODE: "dev"
-          ENV: test
+          PGPASSWORD: changeme
+        run: |
+          for f in $(ls migrations/*.sql | sort); do
+            echo "Applying $f"
+            psql -h localhost -U spb_user -d synthetic_persona_test \
+              -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Run regression tests
         run: uv run pytest tests/integration/test_regression.py -v --tb=short
 
-  # ── Dashboard lint & build ─────────────────────────────────────────────────
+  # ── Dashboard lint, type-check & build ─────────────────────────────────────
   dashboard:
     name: Dashboard — ESLint + Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: dashboard
@@ -194,7 +201,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
           cache-dependency-path: dashboard/package-lock.json
 
@@ -209,3 +216,23 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # ── Single required check for branch protection ────────────────────────────
+  ci-success:
+    name: CI — all checks passed
+    if: always()
+    needs:
+      - python-lint
+      - python-tests
+      - schema-validation
+      - integration-regression
+      - dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job failed or was cancelled
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" || \
+                "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more CI jobs did not succeed."
+            exit 1
+          fi

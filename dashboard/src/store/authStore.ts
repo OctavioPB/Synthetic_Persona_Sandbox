@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { AUTH_TOKEN_STORAGE_KEY as _STORAGE_KEY } from '../services/api'
 
 export interface AuthUser {
   sub: string
@@ -28,8 +29,6 @@ function _parseJwtPayload(token: string): AuthUser | null {
     return null
   }
 }
-
-const _STORAGE_KEY = 'spb_auth_token'
 
 function _loadPersistedToken(): { token: string | null; user: AuthUser | null } {
   try {

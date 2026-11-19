@@ -108,7 +108,7 @@ async def test_segment_create_list_delete(client: AsyncClient) -> None:
         "definition": {
             "age_range": {"min_age": 25, "max_age": 34},
             "geo": {"city": "Barcelona", "country": "Spain"},
-            "category_affinities": ["Travel", "Tech"],
+            "category_affinities": ["Sports", "Electronics"],
             "purchase_history_days": 60,
         },
     }

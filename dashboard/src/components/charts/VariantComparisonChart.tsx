@@ -19,8 +19,6 @@ interface Props {
   data: ComparisonItem[]
 }
 
-const COLORS = ['#003366', '#27B97C', '#7C4DBD', '#F07020', '#E05080']
-
 function scoreColor(score: number): string {
   if (score >= 0.65) return '#22943a'
   if (score >= 0.40) return '#b07d10'
@@ -84,7 +82,7 @@ export default function VariantComparisonChart({ data }: Props): React.JSX.Eleme
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number) => [formatScore(value), 'Conversion Score']}
+          formatter={(value) => [formatScore(Number(value)), 'Conversion Score']}
         />
         <Bar dataKey="score" name="Score" radius={[0, 4, 4, 0]}>
           {data.map((item, i) => (

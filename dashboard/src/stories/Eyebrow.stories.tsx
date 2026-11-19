@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta, StoryObj } from '@storybook/react-vite'
 import Eyebrow from '../components/Eyebrow'
 
 const meta: Meta<typeof Eyebrow> = {

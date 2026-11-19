@@ -76,8 +76,8 @@ export default function ConversionTrendChart({ data }: Props): React.JSX.Element
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number) => [formatScore(value), 'Avg Score']}
-          labelFormatter={formatDate}
+          formatter={(value) => [formatScore(Number(value)), 'Avg Score']}
+          labelFormatter={(label) => formatDate(String(label))}
         />
         <Legend
           wrapperStyle={{ fontFamily: 'var(--fb)', fontSize: 10, color: 'var(--mid)' }}
