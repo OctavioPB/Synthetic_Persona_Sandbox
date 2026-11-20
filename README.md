@@ -1,5 +1,16 @@
 # Synthetic Persona Sandbox
 
+[![CI](https://github.com/OctavioPB/Synthetic_Persona_Sandbox/actions/workflows/ci.yml/badge.svg)](https://github.com/OctavioPB/Synthetic_Persona_Sandbox/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/OctavioPB/Synthetic_Persona_Sandbox/actions/workflows/codeql.yml/badge.svg)](https://github.com/OctavioPB/Synthetic_Persona_Sandbox/actions/workflows/codeql.yml)
+[![License: Proprietary](https://img.shields.io/badge/license-proprietary-red)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Claude](https://img.shields.io/badge/LLM-Claude-D97757)
+![Ruff](https://img.shields.io/badge/lint-ruff-261230)
+![mypy](https://img.shields.io/badge/types-mypy-2A6DB2)
+
 > **AI-powered marketing simulation platform.** Create digital twins of your customer segments and test campaigns against them — before spending a single dollar on ads.
 
 ---
