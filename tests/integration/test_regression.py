@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
@@ -31,6 +32,26 @@ _STAGING_TOKEN = os.getenv("STAGING_TOKEN", "")
 
 # If API_BASE_URL is set, we run against a live server; otherwise use ASGI transport.
 _USE_LIVE_SERVER = bool(_API_BASE_URL)
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _release_loop_bound_resources() -> AsyncIterator[None]:
+    """Drop pooled DB/Redis connections after every test.
+
+    Each test runs on its own event loop, but the app keeps module-level
+    engine/Redis pools. Connections opened on one loop cannot be reused on the
+    next ("attached to a different loop"), so release them before the loop closes.
+    """
+    yield
+    if _USE_LIVE_SERVER:
+        return
+    from api.services.cache import close_redis
+    from api.services.db import engine
+    from api.services.queue import close_arq_pool
+
+    await engine.dispose()
+    await close_redis()
+    await close_arq_pool()
 
 
 @pytest_asyncio.fixture
