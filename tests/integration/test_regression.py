@@ -64,21 +64,17 @@ async def test_health_returns_200(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.local_only
-async def test_auth_required_blocks_unauthenticated() -> None:
+async def test_auth_required_blocks_unauthenticated(monkeypatch: pytest.MonkeyPatch) -> None:
     """When AUTH_REQUIRED=true, all protected endpoints must return 401."""
-    import os
+    from api.auth import dependencies
+    from api.main import app
 
-    original = os.environ.get("AUTH_REQUIRED", "false")
-    os.environ["AUTH_REQUIRED"] = "true"
+    # AUTH_REQUIRED is read once at import time, so patch the module constant.
+    monkeypatch.setattr(dependencies, "AUTH_REQUIRED", True)
 
-    try:
-        from api.main import app
-
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.get("/segments")
-            assert resp.status_code == 401, f"Expected 401, got {resp.status_code}"
-    finally:
-        os.environ["AUTH_REQUIRED"] = original
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.get("/segments")
+        assert resp.status_code == 401, f"Expected 401, got {resp.status_code}"
 
 
 # ── S10-07-03: Dev token endpoint ─────────────────────────────────────────────
@@ -237,13 +233,12 @@ async def test_simulation_run_enqueue_returns_202(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.local_only
-async def test_cross_tenant_isolation() -> None:
+async def test_cross_tenant_isolation(monkeypatch: pytest.MonkeyPatch) -> None:
     """Org A cannot read Org B's segments."""
-    import os
-
-    os.environ["AUTH_REQUIRED"] = "true"
-
+    from api.auth import dependencies
     from api.main import app
+
+    monkeypatch.setattr(dependencies, "AUTH_REQUIRED", True)
 
     org_a_id = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001")
     org_b_id = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001")
@@ -253,42 +248,39 @@ async def test_cross_tenant_isolation() -> None:
     token_a = encode_token(sub="user-a", email="a@test.com", org_id=org_a_id, role="admin")
     token_b = encode_token(sub="user-b", email="b@test.com", org_id=org_b_id, role="admin")
 
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            # Create a segment as Org A
-            create_resp = await c.post(
-                "/segments",
-                json={
-                    "name": "Org A Segment",
-                    "description": "Private to Org A",
-                    "definition": {
-                        "age_range": {"min_age": 18, "max_age": 30},
-                        "geo": {"city": "City", "country": "Country"},
-                        "category_affinities": [],
-                        "purchase_history_days": 7,
-                    },
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        # Create a segment as Org A
+        create_resp = await c.post(
+            "/segments",
+            json={
+                "name": "Org A Segment",
+                "description": "Private to Org A",
+                "definition": {
+                    "age_range": {"min_age": 18, "max_age": 30},
+                    "geo": {"city": "City", "country": "Country"},
+                    "category_affinities": [],
+                    "purchase_history_days": 7,
                 },
-                headers={"Authorization": f"Bearer {token_a}"},
-            )
-            assert create_resp.status_code == 201
-            segment_id = create_resp.json()["id"]
+            },
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        assert create_resp.status_code == 201
+        segment_id = create_resp.json()["id"]
 
-            # Org B attempts to read Org A's segment — must get 404, not the data
-            get_resp = await c.get(
-                f"/segments/{segment_id}",
-                headers={"Authorization": f"Bearer {token_b}"},
-            )
-            assert get_resp.status_code == 404, (
-                f"Cross-tenant data leak: Org B accessed Org A's segment {segment_id}"
-            )
+        # Org B attempts to read Org A's segment — must get 404, not the data
+        get_resp = await c.get(
+            f"/segments/{segment_id}",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        assert get_resp.status_code == 404, (
+            f"Cross-tenant data leak: Org B accessed Org A's segment {segment_id}"
+        )
 
-            # Cleanup as Org A
-            await c.delete(
-                f"/segments/{segment_id}",
-                headers={"Authorization": f"Bearer {token_a}"},
-            )
-    finally:
-        os.environ["AUTH_REQUIRED"] = "false"
+        # Cleanup as Org A
+        await c.delete(
+            f"/segments/{segment_id}",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
 
 
 # ── S10-07-08: Org management endpoints ──────────────────────────────────────
