@@ -18,61 +18,66 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from api.services.db import Base
 
-
 # ── SQLAlchemy ORM models ──────────────────────────────────────────────────────
+
 
 class CampaignORM(Base):
     __tablename__ = "campaigns"
 
-    id: Mapped[uuid.UUID]          = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID]      = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     segment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    name: Mapped[str]              = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str]            = mapped_column(String, nullable=False, default="draft")
+    status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    created_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class CampaignVariantORM(Base):
     __tablename__ = "campaign_variants"
 
-    id: Mapped[uuid.UUID]          = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     campaign_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    name: Mapped[str]              = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
     stimulus: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    rank: Mapped[int | None]       = mapped_column(Integer, nullable=True)
-    score: Mapped[float | None]    = mapped_column(Numeric(5, 4), nullable=True)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    score: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
     run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    created_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 # ── Pydantic request / response models ────────────────────────────────────────
 
+
 class CampaignCreate(BaseModel):
-    name:        str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=120)
     description: str | None = None
-    segment_id:  str | None = Field(default=None, description="UUID of the target segment.")
+    segment_id: str | None = Field(default=None, description="UUID of the target segment.")
 
 
 class CampaignUpdate(BaseModel):
-    name:        str | None = Field(default=None, min_length=1, max_length=120)
+    name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = None
-    segment_id:  str | None = None
-    status:      Literal["draft", "running", "completed", "archived"] | None = None
+    segment_id: str | None = None
+    status: Literal["draft", "running", "completed", "archived"] | None = None
 
 
 class CampaignResponse(BaseModel):
-    id:          str
-    org_id:      str
-    segment_id:  str | None
-    name:        str
+    id: str
+    org_id: str
+    segment_id: str | None
+    name: str
     description: str | None
-    status:      str
-    created_at:  datetime
-    updated_at:  datetime
+    status: str
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -93,26 +98,27 @@ class CampaignResponse(BaseModel):
 class CampaignListResponse(BaseModel):
     items: list[CampaignResponse]
     total: int
-    page:  int
-    size:  int
+    page: int
+    size: int
 
 
 # ── Variant models ─────────────────────────────────────────────────────────────
 
+
 class VariantCreate(BaseModel):
-    name:     str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=120)
     stimulus: dict[str, Any] = Field(description="Stimulus payload with 'type' discriminator.")
 
 
 class VariantResponse(BaseModel):
-    id:          str
+    id: str
     campaign_id: str
-    name:        str
-    stimulus:    dict[str, Any]
-    rank:        int | None
-    score:       float | None
-    run_id:      str | None
-    created_at:  datetime
+    name: str
+    stimulus: dict[str, Any]
+    rank: int | None
+    score: float | None
+    run_id: str | None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 

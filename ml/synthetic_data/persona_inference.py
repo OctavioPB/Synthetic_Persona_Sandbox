@@ -20,7 +20,6 @@ from ml.synthetic_data.claude_client import CachedClaudeClient
 from ml.synthetic_data.persona_context_builder import PersonaContextBuilder
 from ml.synthetic_data.stimulus_schema import (
     AdCopyStimulus,
-    AnyStimulus,
     PriceChangeStimulus,
     PromoStimulus,
     format_stimulus_prompt,
@@ -38,17 +37,19 @@ class SyntheticResponse:
     segment_id: str
     stimulus_id: str
     verbatim_response: str
-    sentiment: str                          # "positive" | "neutral" | "negative"
-    likelihood_to_convert: float            # 0.0–1.0
+    sentiment: str  # "positive" | "neutral" | "negative"
+    likelihood_to_convert: float  # 0.0–1.0
     key_factors: list[str] = field(default_factory=list)
-    raw_text: str = ""                      # unparsed LLM output for debugging
+    raw_text: str = ""  # unparsed LLM output for debugging
     input_tokens: int = 0
     output_tokens: int = 0
     latency_ms: float = 0.0
 
     def __post_init__(self) -> None:
         if self.sentiment not in _VALID_SENTIMENTS:
-            raise ValueError(f"Invalid sentiment '{self.sentiment}'. Must be one of {_VALID_SENTIMENTS}.")
+            raise ValueError(
+                f"Invalid sentiment '{self.sentiment}'. Must be one of {_VALID_SENTIMENTS}."
+            )
         if not 0.0 <= self.likelihood_to_convert <= 1.0:
             raise ValueError(
                 f"likelihood_to_convert must be in [0, 1], got {self.likelihood_to_convert}."
@@ -72,9 +73,9 @@ class PersonaInferenceService:
         model: str | None = None,
         temperature: float = 0.7,
     ) -> None:
-        self._client  = client or CachedClaudeClient()
+        self._client = client or CachedClaudeClient()
         self._builder = builder or PersonaContextBuilder()
-        self._model   = model
+        self._model = model
         self._temperature = temperature
 
     def generate(
@@ -116,7 +117,7 @@ class PersonaInferenceService:
         user_message = format_stimulus_prompt(stimulus)
 
         effective_model = model or self._model
-        effective_temp  = temperature if temperature is not None else self._temperature
+        effective_temp = temperature if temperature is not None else self._temperature
 
         kwargs: dict[str, Any] = {"temperature": effective_temp}
         if effective_model:
@@ -173,16 +174,15 @@ class PersonaInferenceService:
 
         ltc = data["likelihood_to_convert"]
         if not isinstance(ltc, (int, float)):
-            raise ValueError(
-                f"likelihood_to_convert must be numeric, got {type(ltc).__name__}."
-            )
+            raise ValueError(f"likelihood_to_convert must be numeric, got {type(ltc).__name__}.")
         data["likelihood_to_convert"] = max(0.0, min(1.0, float(ltc)))
 
         sentiment = data["sentiment"]
         if sentiment not in _VALID_SENTIMENTS:
             logger.warning(
                 "Unexpected sentiment '%s' for stimulus %s — coercing to 'neutral'.",
-                sentiment, stimulus_id,
+                sentiment,
+                stimulus_id,
             )
             data["sentiment"] = "neutral"
 

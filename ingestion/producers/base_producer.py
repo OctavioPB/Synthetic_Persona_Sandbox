@@ -29,7 +29,9 @@ class BaseAvroProducer(ABC):
         schema_registry_url: str | None = None,
     ) -> None:
         servers = bootstrap_servers or os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-        sr_url  = schema_registry_url or os.getenv("KAFKA_SCHEMA_REGISTRY_URL", "http://localhost:8081")
+        sr_url = schema_registry_url or os.environ.get(
+            "KAFKA_SCHEMA_REGISTRY_URL", "http://localhost:8081"
+        )
 
         self._schema_registry = SchemaRegistryClient(sr_url)
         self._producer = KafkaProducer(

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react'
+import type { Meta, StoryObj } from '@storybook/react-vite'
 import ConversionTrendChart from '../components/charts/ConversionTrendChart'
 
 const meta: Meta<typeof ConversionTrendChart> = {

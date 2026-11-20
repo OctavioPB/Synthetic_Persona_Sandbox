@@ -12,48 +12,54 @@ and is stored verbatim in `simulation_runs.stimulus` JSONB.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 # ── Type discriminator ─────────────────────────────────────────────────────────
 
+
 class StimulusType:
-    AD_COPY      = "ad_copy"
+    AD_COPY = "ad_copy"
     PRICE_CHANGE = "price_change"
-    PROMO        = "promo"
+    PROMO = "promo"
 
 
 # ── Concrete stimulus models ───────────────────────────────────────────────────
 
+
 class AdCopyStimulus(BaseModel):
     """A creative ad — headline, body copy, and call-to-action."""
 
-    type:              Literal["ad_copy"] = "ad_copy"
-    stimulus_id:       str = Field(default_factory=lambda: str(uuid.uuid4()))
-    headline:          str = Field(min_length=1, max_length=200)
-    body_copy:         str = Field(min_length=1, max_length=1000)
-    cta:               str = Field(min_length=1, max_length=100, description="Call-to-action text")
-    product_name:      str | None = None
+    type: Literal["ad_copy"] = "ad_copy"
+    stimulus_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    headline: str = Field(min_length=1, max_length=200)
+    body_copy: str = Field(min_length=1, max_length=1000)
+    cta: str = Field(min_length=1, max_length=100, description="Call-to-action text")
+    product_name: str | None = None
     image_description: str | None = Field(
         default=None,
         description="Text description of the ad visual for context",
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class PriceChangeStimulus(BaseModel):
     """A price reduction or increase announcement."""
 
-    type:           Literal["price_change"] = "price_change"
-    stimulus_id:    str = Field(default_factory=lambda: str(uuid.uuid4()))
-    product_name:   str
+    type: Literal["price_change"] = "price_change"
+    stimulus_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    product_name: str
     original_price: float = Field(gt=0)
-    new_price:      float = Field(gt=0)
-    currency:       str = "USD"
-    created_at:     datetime = Field(default_factory=datetime.utcnow)
+    new_price: float = Field(gt=0)
+    currency: str = "USD"
+    created_at: datetime = Field(default_factory=_utcnow)
 
     @model_validator(mode="after")
     def check_prices_differ(self) -> PriceChangeStimulus:
@@ -74,24 +80,18 @@ class PriceChangeStimulus(BaseModel):
 class PromoStimulus(BaseModel):
     """A promotional offer — percentage or fixed discount."""
 
-    type:                  Literal["promo"] = "promo"
-    stimulus_id:           str = Field(default_factory=lambda: str(uuid.uuid4()))
-    promo_code:            str
-    discount_value:        float = Field(gt=0)
-    discount_type:         Literal["percent", "fixed"]
-    minimum_purchase:      float | None = Field(default=None, ge=0)
-    expiry_days:           int | None   = Field(default=None, ge=1)
-    applicable_categories: list[str]    = Field(default_factory=list)
-    created_at:            datetime     = Field(default_factory=datetime.utcnow)
-
-    @field_validator("discount_value")
-    @classmethod
-    def validate_percent_range(cls, v: float, info: object) -> float:
-        # Can't validate against discount_type here without info; clamped post-init
-        return v
+    type: Literal["promo"] = "promo"
+    stimulus_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    promo_code: str
+    discount_value: float = Field(gt=0)
+    discount_type: Literal["percent", "fixed"]
+    minimum_purchase: float | None = Field(default=None, ge=0)
+    expiry_days: int | None = Field(default=None, ge=1)
+    applicable_categories: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=_utcnow)
 
     @model_validator(mode="after")
-    def clamp_percent(self) -> PromoStimulus:
+    def check_percent_range(self) -> PromoStimulus:
         if self.discount_type == "percent" and self.discount_value > 100:
             raise ValueError("percent discount_value cannot exceed 100")
         return self
@@ -106,6 +106,7 @@ AnyStimulus = Annotated[
 
 
 # ── Text formatter for LLM prompts ────────────────────────────────────────────
+
 
 def format_stimulus_prompt(stimulus: AdCopyStimulus | PriceChangeStimulus | PromoStimulus) -> str:
     """Convert a stimulus into a human-readable prompt block for the LLM.
@@ -131,13 +132,15 @@ def format_stimulus_prompt(stimulus: AdCopyStimulus | PriceChangeStimulus | Prom
 
     if isinstance(stimulus, PriceChangeStimulus):
         direction = "discount" if stimulus.is_discount else "price increase"
-        return "\n".join([
-            "## Marketing Stimulus — Price Change",
-            f"**Product:** {stimulus.product_name}",
-            f"**Original price:** {stimulus.currency}{stimulus.original_price:.2f}",
-            f"**New price:** {stimulus.currency}{stimulus.new_price:.2f}",
-            f"**Change:** {abs(stimulus.discount_pct):.1f}% {direction}",
-        ])
+        return "\n".join(
+            [
+                "## Marketing Stimulus — Price Change",
+                f"**Product:** {stimulus.product_name}",
+                f"**Original price:** {stimulus.currency}{stimulus.original_price:.2f}",
+                f"**New price:** {stimulus.currency}{stimulus.new_price:.2f}",
+                f"**Change:** {abs(stimulus.discount_pct):.1f}% {direction}",
+            ]
+        )
 
     if isinstance(stimulus, PromoStimulus):
         value_str = (

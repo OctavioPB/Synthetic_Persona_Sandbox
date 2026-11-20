@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import Eyebrow from '../components/Eyebrow'
+import { api } from '../services/api'
 
 interface SegmentBuilderPageProps {
   onCancel: () => void
@@ -146,10 +147,7 @@ export default function SegmentBuilderPage({ onCancel, onSaved }: SegmentBuilder
           min_purchase_count:    form.min_purchase_count ? parseInt(form.min_purchase_count) : null,
         },
       }
-      const resp = await fetch('/api/segments', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-      if (!resp.ok) throw new Error(`API error ${resp.status}`)
+      await api.segments.create(body)
       onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed.')

@@ -16,31 +16,36 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import anthropic
 from tenacity import (
+    before_sleep_log,
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    before_sleep_log,
 )
+
+if TYPE_CHECKING:
+    from anthropic.types import TextBlockParam
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL      = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 1024
-_MIN_CACHE_TOKENS  = 100   # only cache system prompts above this token estimate
+_MIN_CACHE_TOKENS = 100  # only cache system prompts above this token estimate
 
 # S6-06: Retry up to 3 times on transient API errors with exponential backoff.
 # Caps at 30 seconds between attempts; total max wait ≈ 2 + 8 + 30 = 40s.
 _api_retry = retry(
-    retry=retry_if_exception_type((
-        anthropic.APIConnectionError,
-        anthropic.RateLimitError,
-        anthropic.InternalServerError,
-    )),
+    retry=retry_if_exception_type(
+        (
+            anthropic.APIConnectionError,
+            anthropic.RateLimitError,
+            anthropic.InternalServerError,
+        )
+    ),
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=2, min=2, max=30),
     before_sleep=before_sleep_log(logger, logging.WARNING),
@@ -96,12 +101,13 @@ class CachedClaudeClient:
             cached (bool), latency_ms (float).
         """
         system_blocks = self._normalize_system(system)
-        cache_key     = self._make_key(model, system_blocks, user_message, temperature, max_tokens)
-        cache_path    = self._cache_dir / f"{cache_key}.json"
+        cache_key = self._make_key(model, system_blocks, user_message, temperature, max_tokens)
+        cache_path = self._cache_dir / f"{cache_key}.json"
 
-        if cache_path.exists():
+        cached = self._read_cache(cache_path)
+        if cached is not None:
             logger.debug("Cache hit: %s", cache_key[:12])
-            return json.loads(cache_path.read_text())
+            return {**cached, "cached": True}
 
         logger.debug("Cache miss: %s — calling API.", cache_key[:12])
         t0 = time.monotonic()
@@ -114,22 +120,48 @@ class CachedClaudeClient:
             user_message=user_message,
         )
 
-        latency_ms  = (time.monotonic() - t0) * 1000
+        latency_ms = (time.monotonic() - t0) * 1000
         result: dict[str, Any] = {
-            "text":         response.content[0].text,
+            "text": response.content[0].text,
             "input_tokens": response.usage.input_tokens,
             "output_tokens": response.usage.output_tokens,
-            "cached":       False,
-            "latency_ms":   round(latency_ms, 1),
+            "cached": False,
+            "latency_ms": round(latency_ms, 1),
         }
-        cache_path.write_text(json.dumps(result))
+        self._write_cache(cache_path, result)
         logger.info(
             "API call complete: in=%d out=%d latency=%.0fms model=%s",
-            result["input_tokens"], result["output_tokens"], latency_ms, model,
+            result["input_tokens"],
+            result["output_tokens"],
+            latency_ms,
+            model,
         )
         return result
 
     # ── Helpers ────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _read_cache(cache_path: Path) -> dict[str, Any] | None:
+        """Return the cached response, or None on a miss or an unreadable file."""
+        try:
+            data: dict[str, Any] = json.loads(cache_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Ignoring unreadable cache entry %s: %s", cache_path.name, exc)
+            return None
+        return data
+
+    @staticmethod
+    def _write_cache(cache_path: Path, result: dict[str, Any]) -> None:
+        """Write atomically so concurrent workers never read a half-written file."""
+        tmp_path = cache_path.with_suffix(f".{os.getpid()}.{time.monotonic_ns()}.tmp")
+        try:
+            tmp_path.write_text(json.dumps(result), encoding="utf-8")
+            tmp_path.replace(cache_path)
+        except OSError as exc:
+            logger.warning("Could not write cache entry %s: %s", cache_path.name, exc)
+            tmp_path.unlink(missing_ok=True)
 
     def _call_api_with_retry(
         self,
@@ -147,15 +179,13 @@ class CachedClaudeClient:
                 model=model,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                system=system_blocks,
+                system=cast("list[TextBlockParam]", system_blocks),
                 messages=[{"role": "user", "content": user_message}],
             )
 
         return _call()
 
-    def _normalize_system(
-        self, system: str | list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def _normalize_system(self, system: str | list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert a plain string system prompt to a content-block list.
 
         Adds `cache_control: ephemeral` when the prompt is long enough to
@@ -180,11 +210,11 @@ class CachedClaudeClient:
     ) -> str:
         payload = json.dumps(
             {
-                "model":       model,
-                "system":      system_blocks,
-                "user":        user_message,
+                "model": model,
+                "system": system_blocks,
+                "user": user_message,
                 "temperature": temperature,
-                "max_tokens":  max_tokens,
+                "max_tokens": max_tokens,
             },
             sort_keys=True,
             default=str,

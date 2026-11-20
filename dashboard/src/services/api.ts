@@ -6,31 +6,68 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown
 }
 
-function _getAuthHeaders(): Record<string, string> {
+export const AUTH_TOKEN_STORAGE_KEY = 'spb_auth_token'
+
+/** Read the persisted JWT, or null when signed out / storage is unavailable. */
+export function getAuthToken(): string | null {
   try {
-    const raw = localStorage.getItem('spb_auth_token')
-    if (raw) return { Authorization: `Bearer ${raw}` }
-  } catch { /* ignore */ }
-  return {}
+    return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+  } catch {
+    return null
+  }
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+/** Error thrown for any non-2xx response; `status` lets callers branch on it. */
+export class ApiError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+/** Pull the human-readable message out of a FastAPI error body. */
+async function readErrorMessage(response: Response): Promise<string> {
+  const text = await response.text()
+  try {
+    const detail = (JSON.parse(text) as { detail?: unknown }).detail
+    if (typeof detail === 'string') return detail
+    if (detail !== undefined) return JSON.stringify(detail)
+  } catch {
+    // not JSON — fall through to the raw body
+  }
+  return text || response.statusText
+}
+
+async function send(path: string, options: RequestOptions = {}): Promise<Response> {
   const { body, ...rest } = options
+  const token = getAuthToken()
   const response = await fetch(`${BASE_URL}${path}`, {
     ...rest,
     headers: {
-      'Content-Type': 'application/json',
-      ..._getAuthHeaders(),
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...rest.headers,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 
   if (!response.ok) {
-    throw new Error(`API error ${response.status}: ${await response.text()}`)
+    throw new ApiError(response.status, `API error ${response.status}: ${await readErrorMessage(response)}`)
   }
+  return response
+}
 
-  return response.json() as Promise<T>
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options)
+  return (await response.json()) as T
+}
+
+/** For endpoints that answer 204 No Content — there is no body to parse. */
+async function requestNoContent(path: string, options: RequestOptions = {}): Promise<void> {
+  await send(path, options)
 }
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -72,13 +109,32 @@ export interface HealthResponse {
   timestamp: number
 }
 
-export interface SegmentSummary {
+export interface SegmentDefinition {
+  category_affinities: string[]
+  purchase_history_days: number
+  age_range?: { min_age: number; max_age: number } | null
+  geo?: { country?: string | null; city?: string | null; region?: string | null } | null
+  min_purchase_count?: number | null
+  min_page_views?: number | null
+}
+
+export interface Segment {
   id: string
   name: string
-  description: string
+  description: string | null
+  definition: SegmentDefinition
   is_stale: boolean
   last_trained_at: string | null
   created_at: string
+}
+
+/** @deprecated Use `Segment` — the list endpoint returns the full object. */
+export type SegmentSummary = Segment
+
+export interface SegmentCreate {
+  name: string
+  description: string | null
+  definition: SegmentDefinition
 }
 
 export interface CampaignResponse {
@@ -144,8 +200,11 @@ export const api = {
     request<HealthResponse>('/health'),
 
   segments: {
-    list: (): Promise<SegmentSummary[]> =>
-      request<{ items: SegmentSummary[] }>('/segments?size=100').then((r) => r.items),
+    list: (): Promise<Segment[]> =>
+      request<{ items: Segment[] }>('/segments?size=100').then((r) => r.items),
+
+    create: (body: SegmentCreate): Promise<Segment> =>
+      request<Segment>('/segments', { method: 'POST', body }),
   },
 
   campaigns: {
@@ -191,7 +250,7 @@ export const api = {
       request<{ items: ApiKeyResponse[]; total: number }>('/auth/keys'),
 
     revokeKey: (keyId: string): Promise<void> =>
-      request<void>(`/auth/keys/${keyId}`, { method: 'DELETE' }),
+      requestNoContent(`/auth/keys/${encodeURIComponent(keyId)}`, { method: 'DELETE' }),
   },
 
   org: {
@@ -205,7 +264,7 @@ export const api = {
       request<{ detail: string }>('/org/members', { method: 'POST', body }),
 
     removeMember: (userId: string): Promise<void> =>
-      request<void>(`/org/members/${userId}`, { method: 'DELETE' }),
+      requestNoContent(`/org/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
   },
 
   admin: {

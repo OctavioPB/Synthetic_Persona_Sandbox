@@ -9,9 +9,11 @@ Wire format: [0x00][schema_id: 4 bytes BE][avro_payload]
 
 from __future__ import annotations
 
+import json
 import logging
 import struct
 from io import BytesIO
+from typing import Any, cast
 
 import fastavro
 import requests
@@ -62,11 +64,11 @@ class SchemaRegistryClient:
         Raises:
             SchemaRegistryError: If registration fails.
         """
-        import json
-
         url = f"{self._base_url}/subjects/{subject}/versions"
-        payload = {"schema": json.dumps(avro_schema)}
-        resp = self._session.post(url, json=payload, headers={"Content-Type": "application/vnd.schemaregistry.v1+json"})
+        payload: dict[str, Any] = {"schema": json.dumps(avro_schema)}
+        resp = self._session.post(
+            url, json=payload, headers={"Content-Type": "application/vnd.schemaregistry.v1+json"}
+        )
         if not resp.ok:
             raise SchemaRegistryError(f"Failed to register schema for '{subject}': {resp.text}")
         schema_id: int = resp.json()["id"]
@@ -87,8 +89,6 @@ class SchemaRegistryClient:
         Raises:
             SchemaRegistryError: If the schema cannot be fetched.
         """
-        import json
-
         if schema_id in self._id_to_schema:
             return self._id_to_schema[schema_id]
 
@@ -96,9 +96,9 @@ class SchemaRegistryClient:
         resp = self._session.get(url)
         if not resp.ok:
             raise SchemaRegistryError(f"Failed to fetch schema_id={schema_id}: {resp.text}")
-        schema = json.loads(resp.json()["schema"])
+        schema: dict[str, Any] = json.loads(resp.json()["schema"])
         self._id_to_schema[schema_id] = schema
-        return schema  # type: ignore[return-value]
+        return schema
 
     # ── Wire format ────────────────────────────────────────────────────────────
 
@@ -133,8 +133,13 @@ class SchemaRegistryClient:
         """
         if data[0:1] != _MAGIC_BYTE:
             raise SchemaRegistryError("Invalid Confluent wire-format magic byte")
-        schema_id = struct.unpack(_SCHEMA_ID_FMT, data[1:5])[0]
+        schema_id: int = struct.unpack(_SCHEMA_ID_FMT, data[1:5])[0]
         writer_schema = self.get_schema_by_id(schema_id)
         buf = BytesIO(data[5:])
-        record = fastavro.schemaless_reader(buf, fastavro.parse_schema(writer_schema))
-        return schema_id, record  # type: ignore[return-value]
+        # Newer fastavro stubs type the result as a wide union; a record schema
+        # always decodes to a dict.
+        record = cast(
+            "dict[str, Any]",
+            fastavro.schemaless_reader(buf, fastavro.parse_schema(writer_schema), None),
+        )
+        return schema_id, record

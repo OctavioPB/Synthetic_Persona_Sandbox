@@ -163,7 +163,7 @@ function VariantProgressCard({ variantName, runId, onComplete }: VariantProgress
       firedRef.current = true
       onCompleteRef.current(progress)
     }
-  }, [progress.status])
+  }, [progress])
 
   if (!runId || progress.status === 'pending' || progress.status === 'running') {
     return <PersonaThinkingIndicator variantName={variantName} />
@@ -313,11 +313,11 @@ function LaunchPhase({ campaignName, segmentId, variants, onAllComplete }: Launc
           const v = variants[i]
           await api.campaigns.createVariant(campaign.id, {
             name: v.name,
-            stimulus: v.stimulus as Record<string, unknown>,
+            stimulus: { ...v.stimulus },
           })
           const run = await api.simulations.run({
             segment_id: segmentId,
-            stimulus: v.stimulus as Record<string, unknown>,
+            stimulus: { ...v.stimulus },
           })
           ids[i] = run.id
         }
@@ -330,7 +330,10 @@ function LaunchPhase({ campaignName, segmentId, variants, onAllComplete }: Launc
 
     launch()
     return () => { mounted = false }
-  }, [])  // intentionally run once on mount
+    // Launching creates a campaign and enqueues paid simulations: it must run
+    // exactly once per mount, never again when the props change identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleVariantComplete = (index: number, progress: SimulationProgress) => {
     completed.current[index] = progress

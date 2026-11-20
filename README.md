@@ -689,7 +689,8 @@ Observation values must be clipped to `[0, 1]`. See the lesson in `CLAUDE.md` un
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+Proprietary — all rights reserved. No use, copying, modification or distribution without
+written approval from the copyright holder. See [LICENSE](LICENSE) for details.
 
 ---
 

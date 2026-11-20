@@ -7,17 +7,14 @@ psycopg2 fixture that mimics RealDictCursor row behaviour.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import MagicMock, patch
-
-import pytest
+from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 from ml.segment_models.feature_engineering import FeatureEngineeringPipeline, _build_query
-from ml.segment_models.segment_schema import AgeRange, GeoFilter, SegmentDefinition, UserFeatures
-
+from ml.segment_models.segment_schema import SegmentDefinition
 
 # ── _build_query ───────────────────────────────────────────────────────────────
+
 
 class TestBuildQuery:
     def test_basic_query_has_since_param(self) -> None:
@@ -57,6 +54,7 @@ class TestBuildQuery:
 
 # ── FeatureEngineeringPipeline ─────────────────────────────────────────────────
 
+
 def _mock_pg_conn(rows: list[dict]) -> MagicMock:  # type: ignore[type-arg]
     """Create a mock psycopg2 connection that returns `rows` from fetchall()."""
     mock_cursor = MagicMock()
@@ -71,22 +69,22 @@ def _mock_pg_conn(rows: list[dict]) -> MagicMock:  # type: ignore[type-arg]
 
 _SAMPLE_ROWS = [
     {
-        "user_id_hash":      "hash-001",
-        "page_view_count":   20,
-        "purchase_count":    3,
-        "session_count":     5,
-        "total_spent":       149.97,
+        "user_id_hash": "hash-001",
+        "page_view_count": 20,
+        "purchase_count": 3,
+        "session_count": 5,
+        "total_spent": 149.97,
         "category_diversity": 2,
-        "last_activity":     datetime(2026, 4, 28, tzinfo=timezone.utc),
+        "last_activity": datetime(2026, 4, 28, tzinfo=UTC),
     },
     {
-        "user_id_hash":      "hash-002",
-        "page_view_count":   8,
-        "purchase_count":    1,
-        "session_count":     2,
-        "total_spent":       49.99,
+        "user_id_hash": "hash-002",
+        "page_view_count": 8,
+        "purchase_count": 1,
+        "session_count": 2,
+        "total_spent": 49.99,
         "category_diversity": 1,
-        "last_activity":     datetime(2026, 5, 1, tzinfo=timezone.utc),
+        "last_activity": datetime(2026, 5, 1, tzinfo=UTC),
     },
 ]
 
@@ -101,9 +99,9 @@ class TestFeatureEngineeringPipeline:
         pipeline = FeatureEngineeringPipeline(conn=_mock_pg_conn(_SAMPLE_ROWS))
         matrix = pipeline.run("seg-001", "Test", SegmentDefinition())
         u = matrix.users[0]
-        assert u.user_id_hash     == "hash-001"
-        assert u.purchase_count   == 3
-        assert u.page_view_count  == 20
+        assert u.user_id_hash == "hash-001"
+        assert u.purchase_count == 3
+        assert u.page_view_count == 20
         assert abs(u.total_spent - 149.97) < 0.001
 
     def test_run_sets_window_days_on_each_user(self) -> None:
@@ -121,7 +119,7 @@ class TestFeatureEngineeringPipeline:
     def test_run_preserves_segment_metadata(self) -> None:
         pipeline = FeatureEngineeringPipeline(conn=_mock_pg_conn(_SAMPLE_ROWS))
         matrix = pipeline.run("seg-xyz", "My Segment", SegmentDefinition())
-        assert matrix.segment_id   == "seg-xyz"
+        assert matrix.segment_id == "seg-xyz"
         assert matrix.segment_name == "My Segment"
 
     def test_context_manager_closes_conn(self) -> None:

@@ -3,6 +3,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from api import __version__
 from api.main import app
 
 
@@ -19,5 +20,5 @@ async def test_health_response_schema() -> None:
         response = await client.get("/health")
     body = response.json()
     assert body["status"] == "ok"
-    assert body["version"] == "0.1.0"
+    assert body["version"] == __version__
     assert isinstance(body["timestamp"], float)

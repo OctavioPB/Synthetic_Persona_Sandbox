@@ -2,40 +2,27 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import logging
-import os
+from collections.abc import Awaitable
+from typing import cast
 
-import redis
+import redis.asyncio as aioredis
 from fastapi import APIRouter, HTTPException
 
+from api.auth.dependencies import CurrentUser
 from api.models.profile import ProfileState
+from api.services.cache import get_redis
+from ingestion.anonymizer import hash_identifier
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
-_SALT = os.getenv("PII_SALT", "dev-only-salt-change-in-prod").encode()
 _PROFILE_KEY = "profile:{}"
 
 
-def _get_redis() -> redis.Redis:  # type: ignore[type-arg]
-    return redis.Redis(
-        host=os.getenv("REDIS_HOST", "localhost"),
-        port=int(os.getenv("REDIS_PORT", "6379")),
-        db=int(os.getenv("REDIS_DB", "0")),
-        decode_responses=True,
-    )
-
-
-def _hash_user_id(user_id: str) -> str:
-    """Hash raw user_id with the same algorithm used by the anonymizer."""
-    return hmac.new(_SALT, user_id.encode(), hashlib.sha256).hexdigest()
-
-
 @router.get("/{user_id}/state", response_model=ProfileState)
-async def get_profile_state(user_id: str) -> ProfileState:
+async def get_profile_state(user_id: str, _: CurrentUser) -> ProfileState:
     """Return the real-time behavioral profile for a user.
 
     Accepts the raw user_id; internally maps it to the anonymized hash
@@ -49,23 +36,23 @@ async def get_profile_state(user_id: str) -> ProfileState:
 
     Raises:
         HTTPException 404: If no events have been ingested for this user yet.
+        HTTPException 503: If the profile store is unreachable.
     """
-    user_id_hash = _hash_user_id(user_id)
-    key = _PROFILE_KEY.format(user_id_hash)
+    user_id_hash = hash_identifier(user_id)
 
     try:
-        r = _get_redis()
-        data = r.hgetall(key)
-    except redis.RedisError as exc:
+        data = await cast(
+            "Awaitable[dict[str, str]]", get_redis().hgetall(_PROFILE_KEY.format(user_id_hash))
+        )
+    except aioredis.RedisError as exc:
         logger.error("Redis error fetching profile %s: %s", user_id_hash[:8], exc)
         raise HTTPException(status_code=503, detail="Profile store unavailable") from exc
 
     if not data:
         raise HTTPException(status_code=404, detail="No behavioral data found for this user")
 
-    raw_cats = data.get("categories_viewed", "[]")
     try:
-        cats: list[str] = json.loads(raw_cats)
+        cats: list[str] = json.loads(data.get("categories_viewed", "[]"))
     except json.JSONDecodeError:
         cats = []
 

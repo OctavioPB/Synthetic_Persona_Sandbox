@@ -1,0 +1,78 @@
+Synthetic Persona Sandbox - Proprietary License
+
+Copyright (c) 2026 Octavio Pérez Bravo. All rights reserved.
+
+1. No license without written approval
+
+   This software, including its source code, documentation, prompts, persona and segment models,
+   evaluation sets, configuration, schemas, designs and any part of them (the "Software"), is the
+   exclusive property of the copyright holder. No right or license is granted, whether express,
+   implied or by estoppel, except by a prior written approval signed by the copyright holder.
+
+   Without that approval, you may not:
+   (a) use, run, install, deploy or host the Software, or offer it as a service;
+   (b) copy or reproduce the Software, in whole or in part;
+   (c) modify it, translate it or create derivative works from it;
+   (d) distribute, publish, sublicense, sell, rent or lend it, or transfer it in any other way;
+   (e) use it, or any part of it, to train, fine-tune or evaluate machine-learning models.
+
+   An approval is limited to the persons, purposes, scope and period it states. It may be
+   revoked as its terms allow, and it ends automatically if any of its terms is broken.
+
+2. Requesting approval
+
+   Requests for approval are made to the copyright holder through the repository's owner account
+   on GitHub. A request is not an approval. Silence is not an approval, and neither is access to
+   the repository.
+
+3. Viewing on GitHub
+
+   If this repository is publicly visible, GitHub's Terms of Service allow its users to view it
+   and to fork it within GitHub. Nothing beyond what those terms require is permitted without
+   written approval.
+
+4. Third-party components and data
+
+   Third-party libraries, models, services and tools used by the Software (including, for
+   example, large language models, Apache Kafka, Apache Airflow, PostgreSQL, Redis and Qdrant)
+   are governed by their own licenses and terms. Data that a user or organization loads into the
+   Software remains the property of its owner. This license covers the Software itself, not those
+   components or that data.
+
+5. No warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+   PARTICULAR PURPOSE, ACCURACY OF SIMULATION RESULTS AND NON-INFRINGEMENT.
+
+6. Simulated output is not a prediction guarantee
+
+   The Software generates synthetic personas and simulated reactions to marketing stimuli. Its
+   output, including persona responses, sentiment, likelihood-to-convert and conversion scores,
+   campaign rankings and analytics, is the result of statistical and language-model inference. It
+   is not a measurement of real customer behavior, not a guarantee of campaign performance, and
+   not professional advice of any kind. Output may be incomplete, biased or wrong. It must be
+   validated against real-world data before anyone relies on it for a business, financial or
+   advertising decision. The person who uses the output is solely responsible for that decision
+   and for its consequences.
+
+7. Limitation of liability
+
+   TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL THE COPYRIGHT HOLDER BE
+   LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
+   ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE, ITS OUTPUT, OR THE USE OF OR OTHER
+   DEALINGS IN THE SOFTWARE. THIS INCLUDES DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL
+   AND PUNITIVE DAMAGES, LOSS OF DATA, LOSS OF PROFITS, WASTED ADVERTISING SPEND AND THE OUTCOME
+   OF ANY MARKETING CAMPAIGN, EVEN IF THE COPYRIGHT HOLDER WAS ADVISED OF THE POSSIBILITY OF SUCH
+   DAMAGES.
+
+8. Indemnity
+
+   Anyone who uses the Software, with or without approval, shall defend, indemnify and hold
+   harmless the copyright holder from any claim, loss or expense, including reasonable legal
+   fees, arising from that use, from its output, or from a breach of this license.
+
+9. Precedence
+
+   A signed written approval may grant rights or set terms beyond this license. Where it does,
+   the approval governs for what it covers. Otherwise this license applies.

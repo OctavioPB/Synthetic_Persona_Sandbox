@@ -74,8 +74,8 @@ export default function StimulusTypeChart({ data }: Props): React.JSX.Element {
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number, _name: string, props: { payload?: StimulusBarData }) => [
-            `${formatScore(value)} (${props.payload?.count ?? 0} runs)`,
+          formatter={(value, _name, item) => [
+            `${formatScore(Number(value))} (${(item.payload as StimulusBarData | undefined)?.count ?? 0} runs)`,
             'Avg Score',
           ]}
         />

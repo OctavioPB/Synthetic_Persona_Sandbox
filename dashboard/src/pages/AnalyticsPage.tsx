@@ -198,7 +198,7 @@ function OverviewTab({ runs }: { runs: SimulationRunResponse[] }): React.JSX.Ele
     completed.forEach((r) => {
       const day = r.created_at.split('T')[0]
       if (!byDay[day]) byDay[day] = []
-      byDay[day].push(r.conversion_score!)
+      byDay[day].push(r.conversion_score ?? 0)
     })
     return Object.entries(byDay)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -486,7 +486,7 @@ function CompareTab({ runs }: { runs: SimulationRunResponse[] }): React.JSX.Elem
     .filter((r) => selected.has(r.id))
     .map((r) => ({
       name: `${stimType(r).replace('_', ' ')} · ${fmtDate(r.created_at)}`,
-      score: r.conversion_score!,
+      score: r.conversion_score ?? 0,
     }))
 
   return (
@@ -578,7 +578,7 @@ export default function AnalyticsPage(): React.JSX.Element {
     completed.forEach((r) => {
       const t = stimType(r)
       if (!byType[t]) byType[t] = []
-      byType[t].push(r.conversion_score!)
+      byType[t].push(r.conversion_score ?? 0)
     })
     const best = Object.entries(byType)
       .map(([t, scores]) => ({ t, avg: scores.reduce((a, v) => a + v, 0) / scores.length }))

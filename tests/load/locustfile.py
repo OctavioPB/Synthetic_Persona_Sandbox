@@ -37,23 +37,23 @@ SEED_SEGMENT_ID = os.getenv("SEED_SEGMENT_ID", "00000000-0000-0000-0000-00000000
 
 _STIMULI = [
     {
-        "type":      "ad_copy",
-        "headline":  "Summer Sale — Up to 50% Off",
+        "type": "ad_copy",
+        "headline": "Summer Sale — Up to 50% Off",
         "body_copy": "Discover curated deals on your favorite categories.",
-        "cta":       "Shop Now",
+        "cta": "Shop Now",
     },
     {
-        "type":           "price_change",
-        "product_name":   "Wireless Headphones",
+        "type": "price_change",
+        "product_name": "Wireless Headphones",
         "original_price": 120.00,
-        "new_price":      89.99,
+        "new_price": 89.99,
     },
     {
-        "type":           "promo",
-        "promo_code":     f"LOAD{random.randint(1000, 9999)}",
+        "type": "promo",
+        "promo_code": f"LOAD{random.randint(1000, 9999)}",
         "discount_value": 15.0,
-        "discount_type":  "percent",
-        "expiry_days":    3,
+        "discount_type": "percent",
+        "expiry_days": 3,
     },
 ]
 

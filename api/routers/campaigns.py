@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth.dependencies import require
+from api.auth.jwt_handler import TokenClaims
 from api.auth.rbac import Permission
 from api.models.campaign import (
     CampaignCreate,
@@ -43,15 +44,14 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 # ── Campaign CRUD ──────────────────────────────────────────────────────────────
 
+
 @router.post("", response_model=CampaignResponse, status_code=201)
 async def create_campaign(
-    body:   CampaignCreate,
-    claims: Annotated[object, Depends(require(Permission.CAMPAIGNS_WRITE))],
-    db:     DbDep,
+    body: CampaignCreate,
+    claims: Annotated[TokenClaims, Depends(require(Permission.CAMPAIGNS_WRITE))],
+    db: DbDep,
 ) -> CampaignResponse:
     """Create a new campaign."""
-    from api.auth.jwt_handler import TokenClaims
-    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
     segment_uid: uuid.UUID | None = None
     if body.segment_id:
@@ -61,7 +61,7 @@ async def create_campaign(
             raise HTTPException(status_code=422, detail="Invalid segment_id format") from exc
 
     campaign = CampaignORM(
-        org_id=claims_typed.org_id,
+        org_id=claims.org_id,
         segment_id=segment_uid,
         name=body.name,
         description=body.description,
@@ -75,24 +75,24 @@ async def create_campaign(
 
 @router.get("", response_model=CampaignListResponse)
 async def list_campaigns(
-    claims: Annotated[object, Depends(require(Permission.CAMPAIGNS_READ))],
-    db:     DbDep,
-    page:   int = Query(default=1, ge=1),
-    size:   int = Query(default=20, ge=1, le=100),
+    claims: Annotated[TokenClaims, Depends(require(Permission.CAMPAIGNS_READ))],
+    db: DbDep,
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
 ) -> CampaignListResponse:
     """List campaigns for the current org, paginated."""
-    from api.auth.jwt_handler import TokenClaims
-    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
     offset = (page - 1) * size
 
-    total = (await db.execute(
-        select(func.count()).select_from(CampaignORM).where(CampaignORM.org_id == claims_typed.org_id)
-    )).scalar_one()
+    total = (
+        await db.execute(
+            select(func.count()).select_from(CampaignORM).where(CampaignORM.org_id == claims.org_id)
+        )
+    ).scalar_one()
 
     rows = await db.execute(
         select(CampaignORM)
-        .where(CampaignORM.org_id == claims_typed.org_id)
+        .where(CampaignORM.org_id == claims.org_id)
         .order_by(CampaignORM.created_at.desc())
         .offset(offset)
         .limit(size)
@@ -110,29 +110,25 @@ async def list_campaigns(
 @router.get("/{campaign_id}", response_model=CampaignResponse)
 async def get_campaign(
     campaign_id: str,
-    claims:      Annotated[object, Depends(require(Permission.CAMPAIGNS_READ))],
-    db:          DbDep,
+    claims: Annotated[TokenClaims, Depends(require(Permission.CAMPAIGNS_READ))],
+    db: DbDep,
 ) -> CampaignResponse:
     """Get a single campaign by ID."""
-    from api.auth.jwt_handler import TokenClaims
-    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
-    campaign = await _get_or_404(campaign_id, claims_typed.org_id, db)
+    campaign = await _get_or_404(campaign_id, claims.org_id, db)
     return CampaignResponse.from_orm(campaign)
 
 
 @router.put("/{campaign_id}", response_model=CampaignResponse)
 async def update_campaign(
     campaign_id: str,
-    body:        CampaignUpdate,
-    claims:      Annotated[object, Depends(require(Permission.CAMPAIGNS_WRITE))],
-    db:          DbDep,
+    body: CampaignUpdate,
+    claims: Annotated[TokenClaims, Depends(require(Permission.CAMPAIGNS_WRITE))],
+    db: DbDep,
 ) -> CampaignResponse:
     """Update a campaign's metadata or status."""
-    from api.auth.jwt_handler import TokenClaims
-    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
-    campaign = await _get_or_404(campaign_id, claims_typed.org_id, db)
+    campaign = await _get_or_404(campaign_id, claims.org_id, db)
 
     if body.name is not None:
         campaign.name = body.name
@@ -154,32 +150,29 @@ async def update_campaign(
 @router.delete("/{campaign_id}", status_code=204)
 async def delete_campaign(
     campaign_id: str,
-    claims:      Annotated[object, Depends(require(Permission.CAMPAIGNS_WRITE))],
-    db:          DbDep,
+    claims: Annotated[TokenClaims, Depends(require(Permission.CAMPAIGNS_WRITE))],
+    db: DbDep,
 ) -> None:
     """Delete a campaign and all its variants (CASCADE)."""
-    from api.auth.jwt_handler import TokenClaims
-    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
-    campaign = await _get_or_404(campaign_id, claims_typed.org_id, db)
+    campaign = await _get_or_404(campaign_id, claims.org_id, db)
     await db.delete(campaign)
     logger.info("Deleted campaign '%s'.", campaign_id)
 
 
 # ── Variant sub-resource ───────────────────────────────────────────────────────
 
+
 @router.post("/{campaign_id}/variants", response_model=VariantResponse, status_code=201)
 async def add_variant(
     campaign_id: str,
-    body:        VariantCreate,
-    claims:      Annotated[object, Depends(require(Permission.CAMPAIGNS_WRITE))],
-    db:          DbDep,
+    body: VariantCreate,
+    claims: Annotated[TokenClaims, Depends(require(Permission.CAMPAIGNS_WRITE))],
+    db: DbDep,
 ) -> VariantResponse:
     """Add an ad variant to a campaign."""
-    from api.auth.jwt_handler import TokenClaims
-    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
-    campaign = await _get_or_404(campaign_id, claims_typed.org_id, db)
+    campaign = await _get_or_404(campaign_id, claims.org_id, db)
 
     if "type" not in body.stimulus:
         raise HTTPException(status_code=422, detail="stimulus must include a 'type' field.")
@@ -199,14 +192,12 @@ async def add_variant(
 @router.get("/{campaign_id}/variants", response_model=list[VariantResponse])
 async def list_variants(
     campaign_id: str,
-    claims:      Annotated[object, Depends(require(Permission.CAMPAIGNS_READ))],
-    db:          DbDep,
+    claims: Annotated[TokenClaims, Depends(require(Permission.CAMPAIGNS_READ))],
+    db: DbDep,
 ) -> list[VariantResponse]:
     """List all variants for a campaign, ordered by rank (nulls last)."""
-    from api.auth.jwt_handler import TokenClaims
-    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
-    campaign = await _get_or_404(campaign_id, claims_typed.org_id, db)
+    campaign = await _get_or_404(campaign_id, claims.org_id, db)
 
     rows = await db.execute(
         select(CampaignVariantORM)
@@ -222,15 +213,13 @@ async def list_variants(
 @router.delete("/{campaign_id}/variants/{variant_id}", status_code=204)
 async def delete_variant(
     campaign_id: str,
-    variant_id:  str,
-    claims:      Annotated[object, Depends(require(Permission.CAMPAIGNS_WRITE))],
-    db:          DbDep,
+    variant_id: str,
+    claims: Annotated[TokenClaims, Depends(require(Permission.CAMPAIGNS_WRITE))],
+    db: DbDep,
 ) -> None:
     """Remove a variant from a campaign."""
-    from api.auth.jwt_handler import TokenClaims
-    claims_typed: TokenClaims = claims  # type: ignore[assignment]
 
-    campaign = await _get_or_404(campaign_id, claims_typed.org_id, db)
+    campaign = await _get_or_404(campaign_id, claims.org_id, db)
 
     try:
         vid = uuid.UUID(variant_id)
@@ -252,6 +241,7 @@ async def delete_variant(
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
+
 
 async def _get_or_404(campaign_id: str, org_id: uuid.UUID, db: AsyncSession) -> CampaignORM:
     try:

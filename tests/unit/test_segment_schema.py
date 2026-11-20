@@ -1,11 +1,10 @@
 """Unit tests for segment definition schemas and feature types."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from ml.segment_models.segment_schema import (
-    AVAILABLE_CATEGORIES,
     AgeRange,
     GeoFilter,
     SegmentDefinition,
@@ -13,8 +12,8 @@ from ml.segment_models.segment_schema import (
     UserFeatures,
 )
 
-
 # ── AgeRange ───────────────────────────────────────────────────────────────────
+
 
 class TestAgeRange:
     def test_valid_range(self) -> None:
@@ -32,11 +31,12 @@ class TestAgeRange:
 
 # ── SegmentDefinition ──────────────────────────────────────────────────────────
 
+
 class TestSegmentDefinition:
     def test_defaults(self) -> None:
         sd = SegmentDefinition()
         assert sd.purchase_history_days == 90
-        assert sd.category_affinities   == []
+        assert sd.category_affinities == []
         assert sd.age_range is None
         assert sd.geo is None
 
@@ -70,6 +70,7 @@ class TestSegmentDefinition:
 
 
 # ── UserFeatures computed properties ──────────────────────────────────────────
+
 
 def _make_user(
     purchase_count: int = 5,
@@ -126,13 +127,14 @@ class TestUserFeatures:
         assert len(u.to_feature_vector()) == 6
 
     def test_to_dict_roundtrip(self) -> None:
-        u = _make_user(last_activity=datetime(2026, 5, 1, tzinfo=timezone.utc))
+        u = _make_user(last_activity=datetime(2026, 5, 1, tzinfo=UTC))
         d = u.to_dict()
         assert d["user_id_hash"] == "abc123"
         assert d["last_activity"] == "2026-05-01T00:00:00+00:00"
 
 
 # ── SegmentFeatureMatrix ───────────────────────────────────────────────────────
+
 
 class TestSegmentFeatureMatrix:
     def _make_matrix(self, n_users: int = 3) -> SegmentFeatureMatrix:
@@ -164,11 +166,11 @@ class TestSegmentFeatureMatrix:
         m = self._make_matrix()
         stats = m.aggregate_stats()
         assert "purchase_frequency_mean" in stats
-        assert "avg_basket_size_mean"    in stats
-        assert "conversion_rate_mean"    in stats
-        assert "session_depth_mean"      in stats
+        assert "avg_basket_size_mean" in stats
+        assert "conversion_rate_mean" in stats
+        assert "session_depth_mean" in stats
         assert "category_diversity_mean" in stats
-        assert "recency_days_mean"       in stats
+        assert "recency_days_mean" in stats
 
     def test_aggregate_stats_empty(self) -> None:
         m = SegmentFeatureMatrix(segment_id="s", segment_name="s", window_days=90, users=[])
@@ -183,7 +185,7 @@ class TestSegmentFeatureMatrix:
     def test_dict_roundtrip(self) -> None:
         m = self._make_matrix(2)
         restored = SegmentFeatureMatrix.from_dict(m.to_dict())
-        assert restored.segment_id   == m.segment_id
+        assert restored.segment_id == m.segment_id
         assert restored.segment_name == m.segment_name
-        assert len(restored.users)   == len(m.users)
+        assert len(restored.users) == len(m.users)
         assert restored.users[0].user_id_hash == m.users[0].user_id_hash

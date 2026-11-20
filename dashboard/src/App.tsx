@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { Suspense, lazy, useState } from 'react'
 import Nav from './components/Nav'
 import Footer from './components/Footer'
 import DashboardPage from './pages/DashboardPage'
@@ -7,13 +7,16 @@ import SegmentBuilderPage from './pages/SegmentBuilderPage'
 import SegmentDetailPage from './pages/SegmentDetailPage'
 import CampaignLauncherPage from './pages/CampaignLauncherPage'
 import SimulationResultsPage from './pages/SimulationResultsPage'
-import AnalyticsPage from './pages/AnalyticsPage'
 import AdminPage from './pages/AdminPage'
-import InfoPage from './pages/InfoPage'
 import LoginPage from './pages/LoginPage'
 import { useCampaignStore } from './store/campaignStore'
 import { useAuthStore } from './store/authStore'
 import { Segment } from './components/SegmentCard'
+
+// Analytics pulls in the charting library and Info is a long static page;
+// loading them on demand keeps both out of the initial bundle.
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
+const InfoPage = lazy(() => import('./pages/InfoPage'))
 
 const _AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === 'true'
 
@@ -50,22 +53,8 @@ export default function App(): React.JSX.Element {
         return (
           <SegmentsPage
             onCreateNew={() => setPage('segment-builder')}
-            onViewDetail={(id) => {
-              const stub: Segment = {
-                id,
-                name: 'Gen Z — Madrid',
-                description: 'Urban young adults with high digital engagement.',
-                definition: {
-                  age_range: { min_age: 18, max_age: 24 },
-                  geo: { city: 'Madrid', country: 'Spain' },
-                  category_affinities: ['Electronics', 'Fashion'],
-                  purchase_history_days: 90,
-                },
-                is_stale: false,
-                last_trained_at: '2026-05-05T10:00:00Z',
-                created_at: '2026-05-01T09:00:00Z',
-              }
-              setActiveSegment(stub)
+            onViewDetail={(segment) => {
+              setActiveSegment(segment)
               setPage('segment-detail')
             }}
           />
@@ -80,11 +69,15 @@ export default function App(): React.JSX.Element {
         )
 
       case 'segment-detail':
-        if (!activeSegment) { setPage('segments'); return <></> }
-        return (
+        return activeSegment ? (
           <SegmentDetailPage
             segment={activeSegment}
             onBack={() => setPage('segments')}
+          />
+        ) : (
+          <SegmentsPage
+            onCreateNew={() => setPage('segment-builder')}
+            onViewDetail={(segment) => setActiveSegment(segment)}
           />
         )
 
@@ -124,7 +117,9 @@ export default function App(): React.JSX.Element {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Nav currentPage={page} onNavigate={setPage} />
-      <main style={{ flex: 1 }}>{renderPage()}</main>
+      <main style={{ flex: 1 }}>
+        <Suspense fallback={null}>{renderPage()}</Suspense>
+      </main>
       <Footer />
     </div>
   )

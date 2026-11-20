@@ -27,7 +27,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import psycopg2
 from airflow.decorators import dag, task
@@ -36,17 +36,17 @@ from airflow.models.param import Param
 logger = logging.getLogger(__name__)
 
 DEFAULT_ARGS = {
-    "owner":           "spb-ml",
+    "owner": "spb-ml",
     "depends_on_past": False,
-    "retries":         2,
-    "retry_delay":     timedelta(minutes=3),
+    "retries": 2,
+    "retry_delay": timedelta(minutes=3),
 }
 
-_KAFKA_TOPIC    = "events.purchases"
+_KAFKA_TOPIC = "events.purchases"
 _KAFKA_GROUP_ID = "behavioral-consumer-group"
-_MAX_LAG        = 10    # tolerate up to 10 messages of lag before proceeding
-_LAG_POLL_SECS  = 6
-_LAG_MAX_POLLS  = 10
+_MAX_LAG = 10  # tolerate up to 10 messages of lag before proceeding
+_LAG_POLL_SECS = 6
+_LAG_MAX_POLLS = 10
 
 
 def _pg_conn() -> psycopg2.extensions.connection:
@@ -68,8 +68,12 @@ def _pg_conn() -> psycopg2.extensions.connection:
     default_args=DEFAULT_ARGS,
     params={
         "segment_id": Param(type="string", description="UUID of the segment."),
-        "stimulus":   Param(type="object", description="Stimulus payload with 'type' discriminator."),
-        "run_id":     Param(type=["string", "null"], default=None, description="Reuse existing run_id for idempotency."),
+        "stimulus": Param(type="object", description="Stimulus payload with 'type' discriminator."),
+        "run_id": Param(
+            type=["string", "null"],
+            default=None,
+            description="Reuse existing run_id for idempotency.",
+        ),
         "temperature": Param(type="number", default=0.7),
     },
     tags=["ml", "simulation", "sprint-5"],
@@ -82,10 +86,10 @@ def run_simulation_pipeline_dag() -> None:
 
         Returns a state dict with 'skip=True' if the run is already completed.
         """
-        params     = context["params"]  # type: ignore[index]
+        params = context["params"]  # type: ignore[index]
         segment_id = str(params["segment_id"])
-        stimulus   = params["stimulus"]
-        run_id     = str(params["run_id"]) if params.get("run_id") else str(uuid.uuid4())
+        stimulus = params["stimulus"]
+        run_id = str(params["run_id"]) if params.get("run_id") else str(uuid.uuid4())
         temperature = float(params.get("temperature", 0.7))
 
         conn = _pg_conn()
@@ -101,11 +105,11 @@ def run_simulation_pipeline_dag() -> None:
             logger.info("Run %s is already completed — pipeline will skip.", run_id)
 
         return {
-            "segment_id":  segment_id,
-            "stimulus":    stimulus,
-            "run_id":      run_id,
+            "segment_id": segment_id,
+            "stimulus": stimulus,
+            "run_id": run_id,
             "temperature": temperature,
-            "skip":        already_done,
+            "skip": already_done,
         }
 
     @task()
@@ -148,7 +152,7 @@ def run_simulation_pipeline_dag() -> None:
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id::text, name, definition FROM segments WHERE id = %s",
+                    "SELECT id::text, name, definition, org_id::text FROM segments WHERE id = %s",
                     (state["segment_id"],),
                 )
                 row = cur.fetchone()
@@ -159,7 +163,12 @@ def run_simulation_pipeline_dag() -> None:
             raise ValueError(f"Segment '{state['segment_id']}' not found.")
 
         logger.info("Fetched segment '%s'.", row[1])
-        return {**state, "segment_name": row[1], "definition": json.dumps(row[2])}
+        return {
+            **state,
+            "segment_name": row[1],
+            "definition": json.dumps(row[2]),
+            "org_id": row[3],
+        }
 
     @task()
     def run_feature_engineering(state: dict) -> dict:  # type: ignore[type-arg]
@@ -180,8 +189,8 @@ def run_simulation_pipeline_dag() -> None:
             )
 
         agg = matrix.aggregate_stats()
-        logger.info("Feature engineering done: %d users.", matrix.user_count)
-        return {**state, "feature_stats": agg, "user_count": matrix.user_count}
+        logger.info("Feature engineering done: %d users.", len(matrix))
+        return {**state, "feature_stats": agg, "user_count": len(matrix)}
 
     @task()
     def run_inference(state: dict) -> dict:  # type: ignore[type-arg]
@@ -189,9 +198,10 @@ def run_simulation_pipeline_dag() -> None:
         if state["skip"]:
             return state
 
+        from pydantic import TypeAdapter
+
         from ml.synthetic_data.persona_inference import PersonaInferenceService
         from ml.synthetic_data.stimulus_schema import AnyStimulus
-        from pydantic import TypeAdapter
 
         adapter: TypeAdapter[AnyStimulus] = TypeAdapter(AnyStimulus)  # type: ignore[arg-type]
         stimulus = adapter.validate_python(state["stimulus"])
@@ -208,17 +218,19 @@ def run_simulation_pipeline_dag() -> None:
 
         logger.info(
             "Inference: sentiment=%s ltc=%.3f latency=%.0fms",
-            response.sentiment, response.likelihood_to_convert, response.latency_ms,
+            response.sentiment,
+            response.likelihood_to_convert,
+            response.latency_ms,
         )
         return {
             **state,
-            "verbatim_response":     response.verbatim_response,
-            "sentiment":             response.sentiment,
+            "verbatim_response": response.verbatim_response,
+            "sentiment": response.sentiment,
             "likelihood_to_convert": response.likelihood_to_convert,
-            "key_factors":           response.key_factors,
-            "input_tokens":          response.input_tokens,
-            "output_tokens":         response.output_tokens,
-            "latency_ms":            response.latency_ms,
+            "key_factors": response.key_factors,
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "latency_ms": response.latency_ms,
         }
 
     @task()
@@ -240,7 +252,7 @@ def run_simulation_pipeline_dag() -> None:
             key_factors=state.get("key_factors", []),
         )
         conversion_score = ConversionScorer().score(synthetic)
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         conn = _pg_conn()
         try:
@@ -248,10 +260,10 @@ def run_simulation_pipeline_dag() -> None:
                 cur.execute(
                     """
                     INSERT INTO simulation_runs
-                        (id, segment_id, stimulus, verbatim_response, sentiment,
+                        (id, org_id, segment_id, stimulus, verbatim_response, sentiment,
                          likelihood_to_convert, conversion_score, llm_metadata,
                          status, completed_at)
-                    VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s, %s::jsonb, 'completed', %s)
+                    VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s::jsonb, 'completed', %s)
                     ON CONFLICT (id) DO UPDATE SET
                         verbatim_response     = EXCLUDED.verbatim_response,
                         sentiment             = EXCLUDED.sentiment,
@@ -263,18 +275,21 @@ def run_simulation_pipeline_dag() -> None:
                     """,
                     (
                         state["run_id"],
+                        state["org_id"],
                         state["segment_id"],
                         json.dumps(state["stimulus"]),
                         synthetic.verbatim_response,
                         synthetic.sentiment,
                         synthetic.likelihood_to_convert,
                         conversion_score,
-                        json.dumps({
-                            "key_factors":   state.get("key_factors", []),
-                            "input_tokens":  state.get("input_tokens", 0),
-                            "output_tokens": state.get("output_tokens", 0),
-                            "latency_ms":    state.get("latency_ms", 0.0),
-                        }),
+                        json.dumps(
+                            {
+                                "key_factors": state.get("key_factors", []),
+                                "input_tokens": state.get("input_tokens", 0),
+                                "output_tokens": state.get("output_tokens", 0),
+                                "latency_ms": state.get("latency_ms", 0.0),
+                            }
+                        ),
                         now,
                     ),
                 )

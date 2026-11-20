@@ -10,54 +10,63 @@ Roles (from least to most privileged):
 from __future__ import annotations
 
 from enum import StrEnum, auto
+from typing import Literal
+
+Role = Literal["viewer", "analyst", "marketer", "admin"]
 
 
 class Permission(StrEnum):
     # Simulations
-    SIMULATIONS_READ   = auto()
-    SIMULATIONS_RUN    = auto()
+    SIMULATIONS_READ = auto()
+    SIMULATIONS_RUN = auto()
 
     # Segments
-    SEGMENTS_READ      = auto()
-    SEGMENTS_WRITE     = auto()
+    SEGMENTS_READ = auto()
+    SEGMENTS_WRITE = auto()
 
     # Campaigns
-    CAMPAIGNS_READ     = auto()
-    CAMPAIGNS_WRITE    = auto()
+    CAMPAIGNS_READ = auto()
+    CAMPAIGNS_WRITE = auto()
 
     # Org management
-    ORG_MEMBERS_READ   = auto()
+    ORG_MEMBERS_READ = auto()
     ORG_MEMBERS_MANAGE = auto()
-    ORG_KEYS_READ      = auto()
-    ORG_KEYS_MANAGE    = auto()
-    ORG_AUDIT_READ     = auto()
-    ORG_DATA_DELETE    = auto()
+    ORG_KEYS_READ = auto()
+    ORG_KEYS_MANAGE = auto()
+    ORG_AUDIT_READ = auto()
+    ORG_DATA_DELETE = auto()
 
 
-_VIEWER_PERMISSIONS: frozenset[Permission] = frozenset({
-    Permission.SIMULATIONS_READ,
-    Permission.SEGMENTS_READ,
-    Permission.CAMPAIGNS_READ,
-})
+_VIEWER_PERMISSIONS: frozenset[Permission] = frozenset(
+    {
+        Permission.SIMULATIONS_READ,
+        Permission.SEGMENTS_READ,
+        Permission.CAMPAIGNS_READ,
+    }
+)
 
-_ANALYST_PERMISSIONS: frozenset[Permission] = _VIEWER_PERMISSIONS | frozenset({
-    Permission.ORG_AUDIT_READ,
-})
+_ANALYST_PERMISSIONS: frozenset[Permission] = _VIEWER_PERMISSIONS | frozenset(
+    {
+        Permission.ORG_AUDIT_READ,
+    }
+)
 
-_MARKETER_PERMISSIONS: frozenset[Permission] = _ANALYST_PERMISSIONS | frozenset({
-    Permission.SIMULATIONS_RUN,
-    Permission.SEGMENTS_WRITE,
-    Permission.CAMPAIGNS_WRITE,
-    Permission.ORG_KEYS_READ,
-})
+_MARKETER_PERMISSIONS: frozenset[Permission] = _ANALYST_PERMISSIONS | frozenset(
+    {
+        Permission.SIMULATIONS_RUN,
+        Permission.SEGMENTS_WRITE,
+        Permission.CAMPAIGNS_WRITE,
+        Permission.ORG_KEYS_READ,
+    }
+)
 
-_ADMIN_PERMISSIONS: frozenset[Permission] = frozenset(Permission)   # all permissions
+_ADMIN_PERMISSIONS: frozenset[Permission] = frozenset(Permission)  # all permissions
 
 ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
-    "viewer":   _VIEWER_PERMISSIONS,
-    "analyst":  _ANALYST_PERMISSIONS,
+    "viewer": _VIEWER_PERMISSIONS,
+    "analyst": _ANALYST_PERMISSIONS,
     "marketer": _MARKETER_PERMISSIONS,
-    "admin":    _ADMIN_PERMISSIONS,
+    "admin": _ADMIN_PERMISSIONS,
 }
 
 

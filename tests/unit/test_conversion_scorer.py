@@ -31,6 +31,7 @@ def scorer() -> ConversionScorer:
 
 # ── Sentiment nudge behavior ───────────────────────────────────────────────────
 
+
 def test_positive_nudge_increases_score(scorer) -> None:
     response = _make_response("positive", 0.6)
     result = scorer.score(response)
@@ -63,6 +64,7 @@ def test_negative_nudge_value(scorer) -> None:
 
 # ── Clamping behavior ──────────────────────────────────────────────────────────
 
+
 def test_clamp_above_1(scorer) -> None:
     response = _make_response("positive", 0.99)
     result = scorer.score(response)
@@ -84,11 +86,12 @@ def test_output_always_in_range(scorer) -> None:
 
 # ── Batch scoring ──────────────────────────────────────────────────────────────
 
+
 def test_score_batch_preserves_order(scorer) -> None:
     responses = [
         _make_response("positive", 0.5, stimulus_id="s1"),
         _make_response("negative", 0.5, stimulus_id="s2"),
-        _make_response("neutral",  0.5, stimulus_id="s3"),
+        _make_response("neutral", 0.5, stimulus_id="s3"),
     ]
     scores = scorer.score_batch(responses)
     assert len(scores) == 3

@@ -25,7 +25,6 @@ from ingestion.anonymizer import AnonymizerService
 from ingestion.schemas.events import (
     RawPageViewEvent,
     RawPurchaseEvent,
-    SessionEventType,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -55,6 +54,7 @@ def anonymizer() -> AnonymizerService:
 
 
 # ── PII anonymizer → Redis ─────────────────────────────────────────────────────
+
 
 def test_page_view_profile_updated_in_redis(
     redis_client: redis.Redis,  # type: ignore[type-arg]
@@ -92,6 +92,7 @@ def test_page_view_profile_updated_in_redis(
 
 # ── API endpoint reads from Redis ──────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_get_profile_state_returns_404_for_unknown_user() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -122,14 +123,17 @@ async def test_get_profile_state_returns_data_after_ingest(
     anon = anonymizer.anonymize_purchase(raw)
     key = f"profile:{anon.user_id_hash}"
 
-    redis_client.hset(key, mapping={
-        "purchase_count":          "1",
-        "purchase_total_amount":   "999.99",
-        "page_views_total":        "0",
-        "session_count":           "0",
-        "last_seen":               "2026-05-05T00:00:00+00:00",
-        "categories_viewed":       "[]",
-    })
+    redis_client.hset(
+        key,
+        mapping={
+            "purchase_count": "1",
+            "purchase_total_amount": "999.99",
+            "page_views_total": "0",
+            "session_count": "0",
+            "last_seen": "2026-05-05T00:00:00+00:00",
+            "categories_viewed": "[]",
+        },
+    )
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(f"/profiles/{user_id}/state")

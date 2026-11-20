@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import Eyebrow from '../components/Eyebrow'
 import SegmentCard, { Segment } from '../components/SegmentCard'
+import { api } from '../services/api'
 
 interface SegmentsPageProps {
   onCreateNew: () => void
-  onViewDetail: (id: string) => void
+  onViewDetail: (segment: Segment) => void
 }
 
 const heroStyle: React.CSSProperties = {
@@ -79,40 +80,22 @@ const emptyState: React.CSSProperties = {
   fontSize: 14,
 }
 
-// Stub data for Sprint 3 UI; replaced by real API call in Sprint 6
-const STUB_SEGMENTS: Segment[] = [
-  {
-    id: 'stub-001',
-    name: 'Gen Z — Madrid',
-    description: 'Urban young adults with high digital engagement in fashion and electronics.',
-    definition: {
-      age_range: { min_age: 18, max_age: 24 },
-      geo: { city: 'Madrid', country: 'Spain' },
-      category_affinities: ['Electronics', 'Fashion'],
-      purchase_history_days: 90,
-    },
-    is_stale: false,
-    last_trained_at: '2026-05-05T10:00:00Z',
-    created_at: '2026-05-01T09:00:00Z',
-  },
-  {
-    id: 'stub-002',
-    name: 'Home Improvers — 30-45',
-    description: 'Mid-career professionals investing in their living spaces.',
-    definition: {
-      age_range: { min_age: 30, max_age: 45 },
-      geo: null,
-      category_affinities: ['Home & Garden'],
-      purchase_history_days: 180,
-    },
-    is_stale: true,
-    last_trained_at: null,
-    created_at: '2026-05-03T14:00:00Z',
-  },
-]
-
 export default function SegmentsPage({ onCreateNew, onViewDetail }: SegmentsPageProps): React.JSX.Element {
-  const [segments, setSegments] = useState<Segment[]>(STUB_SEGMENTS)
+  const [segments, setSegments] = useState<Segment[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    api.segments.list()
+      .then((items) => { if (active) setSegments(items) })
+      .catch((err: unknown) => {
+        if (active) setError(err instanceof Error ? err.message : 'Could not load segments.')
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
   const total    = segments.length
   const trained  = segments.filter((s) => !s.is_stale).length
   const stale    = segments.filter((s) => s.is_stale).length
@@ -164,7 +147,14 @@ export default function SegmentsPage({ onCreateNew, onViewDetail }: SegmentsPage
             Defined audience profiles
           </h2>
 
-          {segments.length === 0 ? (
+          {loading ? (
+            <div style={emptyState}><p>Loading segments…</p></div>
+          ) : error ? (
+            <div style={emptyState} role="alert">
+              <p>Could not load segments.</p>
+              <p style={{ fontSize: 12, marginTop: 8 }}>{error}</p>
+            </div>
+          ) : segments.length === 0 ? (
             <div style={emptyState}>
               <p>No segments yet.</p>
               <button style={{ ...createBtn, marginTop: 16 }} onClick={onCreateNew}>Create your first segment</button>

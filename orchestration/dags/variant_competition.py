@@ -23,7 +23,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import psycopg2
 from airflow.decorators import dag, task
@@ -32,10 +32,10 @@ from airflow.models.param import Param
 logger = logging.getLogger(__name__)
 
 DEFAULT_ARGS = {
-    "owner":           "spb-ml",
+    "owner": "spb-ml",
     "depends_on_past": False,
-    "retries":         1,
-    "retry_delay":     timedelta(minutes=5),
+    "retries": 1,
+    "retry_delay": timedelta(minutes=5),
 }
 
 
@@ -80,7 +80,7 @@ def variant_competition_dag() -> None:
                 cur.execute(
                     """
                     SELECT c.id::text, c.name, c.segment_id::text,
-                           s.name, s.definition
+                           s.name, s.definition, c.org_id::text
                     FROM   campaigns c
                     LEFT JOIN segments s ON s.id = c.segment_id
                     WHERE  c.id = %s
@@ -110,16 +110,19 @@ def variant_competition_dag() -> None:
 
         logger.info(
             "Competing %d variants for campaign '%s' on segment '%s'.",
-            len(variants), row[1], row[3],
+            len(variants),
+            row[1],
+            row[3],
         )
         return {
-            "campaign_id":   campaign_id,
+            "campaign_id": campaign_id,
             "campaign_name": row[1],
-            "segment_id":    row[2],
-            "segment_name":  row[3],
-            "definition":    json.dumps(row[4]),
-            "variants":      variants,
-            "temperature":   temperature,
+            "org_id": row[5],
+            "segment_id": row[2],
+            "segment_name": row[3],
+            "definition": json.dumps(row[4]),
+            "variants": variants,
+            "temperature": temperature,
         }
 
     @task()
@@ -151,10 +154,11 @@ def variant_competition_dag() -> None:
             logger.info("Variant %s already scored (%.4f) — skipping.", variant_id, existing[0])
             return {"variant_id": variant_id, "score": float(existing[0]), "skipped": True}
 
+        from pydantic import TypeAdapter
+
         from ml.synthetic_data.conversion_scorer import ConversionScorer
         from ml.synthetic_data.persona_inference import PersonaInferenceService
         from ml.synthetic_data.stimulus_schema import AnyStimulus
-        from pydantic import TypeAdapter
 
         adapter: TypeAdapter[AnyStimulus] = TypeAdapter(AnyStimulus)  # type: ignore[arg-type]
         stimulus = adapter.validate_python(variant_spec["stimulus"])
@@ -170,23 +174,27 @@ def variant_competition_dag() -> None:
 
         # Persist simulation run and link to variant
         run_id = str(uuid.uuid4())
-        now    = datetime.now(timezone.utc).isoformat()
-        conn   = _pg_conn()
+        now = datetime.now(UTC).isoformat()
+        conn = _pg_conn()
         try:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO simulation_runs
-                        (id, segment_id, stimulus, verbatim_response, sentiment,
+                        (id, org_id, segment_id, stimulus, verbatim_response, sentiment,
                          likelihood_to_convert, conversion_score, llm_metadata,
                          status, completed_at)
-                    VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s, %s::jsonb, 'completed', %s)
+                    VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s::jsonb, 'completed', %s)
                     """,
                     (
-                        run_id, variant_spec["segment_id"],
+                        run_id,
+                        variant_spec["org_id"],
+                        variant_spec["segment_id"],
                         json.dumps(variant_spec["stimulus"]),
-                        response.verbatim_response, response.sentiment,
-                        response.likelihood_to_convert, score,
+                        response.verbatim_response,
+                        response.sentiment,
+                        response.likelihood_to_convert,
+                        score,
                         json.dumps({"key_factors": response.key_factors}),
                         now,
                     ),
@@ -197,7 +205,9 @@ def variant_competition_dag() -> None:
 
         logger.info(
             "Variant '%s' scored: %.4f (sentiment=%s).",
-            variant_spec["variant_name"], score, response.sentiment,
+            variant_spec["variant_name"],
+            score,
+            response.sentiment,
         )
         return {"variant_id": variant_id, "score": score, "run_id": run_id, "skipped": False}
 
@@ -233,8 +243,10 @@ def variant_competition_dag() -> None:
             conn.commit()
             logger.info(
                 "Ranked %d variants for campaign '%s'. #1: variant=%s score=%.4f.",
-                len(ranked), campaign_id,
-                ranked[0]["variant_id"], ranked[0]["score"],
+                len(ranked),
+                campaign_id,
+                ranked[0]["variant_id"],
+                ranked[0]["score"],
             )
         finally:
             conn.close()
@@ -249,10 +261,11 @@ def variant_competition_dag() -> None:
     def build_variant_specs(campaign_data: dict) -> list[dict]:  # type: ignore[type-arg]
         """Inject shared segment context into each variant dict for fan-out."""
         shared = {
-            "segment_id":   campaign_data["segment_id"],
+            "org_id": campaign_data["org_id"],
+            "segment_id": campaign_data["segment_id"],
             "segment_name": campaign_data["segment_name"],
-            "definition":   campaign_data["definition"],
-            "temperature":  campaign_data["temperature"],
+            "definition": campaign_data["definition"],
+            "temperature": campaign_data["temperature"],
         }
         return [{**v, **shared} for v in campaign_data["variants"]]
 

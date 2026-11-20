@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -35,27 +35,27 @@ pytestmark = pytest.mark.skipif(
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
 AD_COPY_STIMULUS = {
-    "type":      "ad_copy",
-    "headline":  "Shop Smarter This Season",
+    "type": "ad_copy",
+    "headline": "Shop Smarter This Season",
     "body_copy": "Discover curated deals tailored just for you.",
-    "cta":       "Explore Now",
+    "cta": "Explore Now",
     "product_name": "Summer Collection",
 }
 
 PRICE_CHANGE_STIMULUS = {
-    "type":           "price_change",
-    "product_name":   "Wireless Headphones",
+    "type": "price_change",
+    "product_name": "Wireless Headphones",
     "original_price": 120.00,
-    "new_price":      89.99,
+    "new_price": 89.99,
 }
 
 PROMO_STIMULUS = {
-    "type":           "promo",
-    "promo_code":     "SAVE15",
+    "type": "promo",
+    "promo_code": "SAVE15",
     "discount_value": 15.0,
-    "discount_type":  "percent",
+    "discount_type": "percent",
     "minimum_purchase": 50.0,
-    "expiry_days":    7,
+    "expiry_days": 7,
 }
 
 
@@ -68,14 +68,17 @@ async def client() -> AsyncClient:
 @pytest_asyncio.fixture()
 async def segment_id(client: AsyncClient) -> str:
     """Create a test segment and return its ID."""
-    resp = await client.post("/segments", json={
-        "name": "Integration Test Segment",
-        "description": "Used by Sprint 5 integration tests.",
-        "definition": {
-            "category_affinities": ["Electronics"],
-            "purchase_history_days": 30,
+    resp = await client.post(
+        "/segments",
+        json={
+            "name": "Integration Test Segment",
+            "description": "Used by Sprint 5 integration tests.",
+            "definition": {
+                "category_affinities": ["Electronics"],
+                "purchase_history_days": 30,
+            },
         },
-    })
+    )
     assert resp.status_code == 201
     return resp.json()["id"]
 
@@ -83,23 +86,30 @@ async def segment_id(client: AsyncClient) -> str:
 @pytest_asyncio.fixture()
 async def campaign_id(client: AsyncClient, segment_id: str) -> str:
     """Create a test campaign and return its ID."""
-    resp = await client.post("/campaigns", json={
-        "name": "Summer Launch Campaign",
-        "description": "Test campaign for variant competition.",
-        "segment_id": segment_id,
-    })
+    resp = await client.post(
+        "/campaigns",
+        json={
+            "name": "Summer Launch Campaign",
+            "description": "Test campaign for variant competition.",
+            "segment_id": segment_id,
+        },
+    )
     assert resp.status_code == 201
     return resp.json()["id"]
 
 
 # ── Campaign CRUD ──────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_create_campaign(client: AsyncClient, segment_id: str) -> None:
-    resp = await client.post("/campaigns", json={
-        "name": "Test Campaign",
-        "segment_id": segment_id,
-    })
+    resp = await client.post(
+        "/campaigns",
+        json={
+            "name": "Test Campaign",
+            "segment_id": segment_id,
+        },
+    )
     assert resp.status_code == 201
     body = resp.json()
     assert body["name"] == "Test Campaign"
@@ -136,13 +146,17 @@ async def test_delete_campaign(client: AsyncClient, segment_id: str) -> None:
 
 # ── Variant CRUD ───────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_add_and_list_variants(client: AsyncClient, campaign_id: str) -> None:
     for i, stimulus in enumerate([AD_COPY_STIMULUS, PROMO_STIMULUS], start=1):
-        resp = await client.post(f"/campaigns/{campaign_id}/variants", json={
-            "name": f"Variant {i}",
-            "stimulus": stimulus,
-        })
+        resp = await client.post(
+            f"/campaigns/{campaign_id}/variants",
+            json={
+                "name": f"Variant {i}",
+                "stimulus": stimulus,
+            },
+        )
         assert resp.status_code == 201
 
     list_resp = await client.get(f"/campaigns/{campaign_id}/variants")
@@ -153,10 +167,13 @@ async def test_add_and_list_variants(client: AsyncClient, campaign_id: str) -> N
 
 @pytest.mark.asyncio
 async def test_delete_variant(client: AsyncClient, campaign_id: str) -> None:
-    add = await client.post(f"/campaigns/{campaign_id}/variants", json={
-        "name": "Temp Variant",
-        "stimulus": AD_COPY_STIMULUS,
-    })
+    add = await client.post(
+        f"/campaigns/{campaign_id}/variants",
+        json={
+            "name": "Temp Variant",
+            "stimulus": AD_COPY_STIMULUS,
+        },
+    )
     vid = add.json()["id"]
     del_resp = await client.delete(f"/campaigns/{campaign_id}/variants/{vid}")
     assert del_resp.status_code == 204
@@ -164,9 +181,11 @@ async def test_delete_variant(client: AsyncClient, campaign_id: str) -> None:
 
 # ── Simulation run ─────────────────────────────────────────────────────────────
 
+
 def _mock_inference_service():
     """Return a mock PersonaInferenceService that avoids real Claude calls."""
     from ml.synthetic_data.persona_inference import SyntheticResponse
+
     mock = MagicMock()
     mock.generate.return_value = SyntheticResponse(
         segment_id="test",
@@ -183,14 +202,15 @@ def _mock_inference_service():
 
 
 @pytest.mark.asyncio
-async def test_simulate_run_returns_scored_result(
-    client: AsyncClient, segment_id: str
-) -> None:
+async def test_simulate_run_returns_scored_result(client: AsyncClient, segment_id: str) -> None:
     with patch("api.routers.simulations._inference_service", _mock_inference_service()):
-        resp = await client.post("/simulate/run", json={
-            "segment_id": segment_id,
-            "stimulus":   AD_COPY_STIMULUS,
-        })
+        resp = await client.post(
+            "/simulate/run",
+            json={
+                "segment_id": segment_id,
+                "stimulus": AD_COPY_STIMULUS,
+            },
+        )
 
     assert resp.status_code == 201
     body = resp.json()
@@ -201,16 +221,17 @@ async def test_simulate_run_returns_scored_result(
 
 
 @pytest.mark.asyncio
-async def test_simulate_run_all_stimulus_types(
-    client: AsyncClient, segment_id: str
-) -> None:
+async def test_simulate_run_all_stimulus_types(client: AsyncClient, segment_id: str) -> None:
     mock_svc = _mock_inference_service()
     for stimulus in [AD_COPY_STIMULUS, PRICE_CHANGE_STIMULUS, PROMO_STIMULUS]:
         with patch("api.routers.simulations._inference_service", mock_svc):
-            resp = await client.post("/simulate/run", json={
-                "segment_id": segment_id,
-                "stimulus":   stimulus,
-            })
+            resp = await client.post(
+                "/simulate/run",
+                json={
+                    "segment_id": segment_id,
+                    "stimulus": stimulus,
+                },
+            )
         assert resp.status_code == 201, f"Failed for stimulus type '{stimulus['type']}'"
 
 
@@ -218,10 +239,13 @@ async def test_simulate_run_all_stimulus_types(
 async def test_simulate_run_unknown_segment_returns_404(
     client: AsyncClient,
 ) -> None:
-    resp = await client.post("/simulate/run", json={
-        "segment_id": str(uuid.uuid4()),
-        "stimulus":   AD_COPY_STIMULUS,
-    })
+    resp = await client.post(
+        "/simulate/run",
+        json={
+            "segment_id": str(uuid.uuid4()),
+            "stimulus": AD_COPY_STIMULUS,
+        },
+    )
     assert resp.status_code == 404
 
 
@@ -229,25 +253,30 @@ async def test_simulate_run_unknown_segment_returns_404(
 async def test_simulate_run_invalid_stimulus_returns_422(
     client: AsyncClient, segment_id: str
 ) -> None:
-    resp = await client.post("/simulate/run", json={
-        "segment_id": segment_id,
-        "stimulus":   {"type": "unknown_type", "foo": "bar"},
-    })
+    resp = await client.post(
+        "/simulate/run",
+        json={
+            "segment_id": segment_id,
+            "stimulus": {"type": "unknown_type", "foo": "bar"},
+        },
+    )
     assert resp.status_code == 422
 
 
 # ── Simulation history (S5-08 — already implemented in S4, tested here) ────────
 
+
 @pytest.mark.asyncio
-async def test_list_runs_filter_by_segment(
-    client: AsyncClient, segment_id: str
-) -> None:
+async def test_list_runs_filter_by_segment(client: AsyncClient, segment_id: str) -> None:
     mock_svc = _mock_inference_service()
     with patch("api.routers.simulations._inference_service", mock_svc):
-        await client.post("/simulate/run", json={
-            "segment_id": segment_id,
-            "stimulus":   AD_COPY_STIMULUS,
-        })
+        await client.post(
+            "/simulate/run",
+            json={
+                "segment_id": segment_id,
+                "stimulus": AD_COPY_STIMULUS,
+            },
+        )
 
     resp = await client.get(f"/simulate/runs?segment_id={segment_id}")
     assert resp.status_code == 200
@@ -258,17 +287,19 @@ async def test_list_runs_filter_by_segment(
 
 # ── WebSocket progress stream ──────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_ws_streams_completed_run(
-    client: AsyncClient, segment_id: str
-) -> None:
+async def test_ws_streams_completed_run(client: AsyncClient, segment_id: str) -> None:
     """Create a run, then connect via WS and verify the terminal update is received."""
     mock_svc = _mock_inference_service()
     with patch("api.routers.simulations._inference_service", mock_svc):
-        run_resp = await client.post("/simulate/run", json={
-            "segment_id": segment_id,
-            "stimulus":   AD_COPY_STIMULUS,
-        })
+        run_resp = await client.post(
+            "/simulate/run",
+            json={
+                "segment_id": segment_id,
+                "stimulus": AD_COPY_STIMULUS,
+            },
+        )
     run_id = run_resp.json()["id"]
 
     messages = []

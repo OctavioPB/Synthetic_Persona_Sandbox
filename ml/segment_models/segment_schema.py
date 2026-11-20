@@ -7,9 +7,9 @@ engineering pipeline.
 
 from __future__ import annotations
 
-import json
+import statistics
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -26,6 +26,7 @@ AVAILABLE_CATEGORIES: list[str] = [
 
 
 # ── Segment definition (stored as JSONB in segments.definition) ────────────────
+
 
 class AgeRange(BaseModel):
     """Inclusive age range for demographic filtering."""
@@ -44,8 +45,8 @@ class GeoFilter(BaseModel):
     """Geographic filter for a segment."""
 
     country: str | None = None
-    city:    str | None = None
-    region:  str | None = None
+    city: str | None = None
+    region: str | None = None
 
 
 class SegmentDefinition(BaseModel):
@@ -56,13 +57,14 @@ class SegmentDefinition(BaseModel):
     `extract_segment_data` Airflow DAG.
     """
 
-    age_range:             AgeRange | None = None
-    geo:                   GeoFilter | None = None
-    category_affinities:   list[str] = Field(default_factory=list)
-    purchase_history_days: int = Field(default=90, ge=1, le=365,
-                                       description="Lookback window for behavioral events")
-    min_purchase_count:    int | None = Field(default=None, ge=0)
-    min_page_views:        int | None = Field(default=None, ge=0)
+    age_range: AgeRange | None = None
+    geo: GeoFilter | None = None
+    category_affinities: list[str] = Field(default_factory=list)
+    purchase_history_days: int = Field(
+        default=90, ge=1, le=365, description="Lookback window for behavioral events"
+    )
+    min_purchase_count: int | None = Field(default=None, ge=0)
+    min_page_views: int | None = Field(default=None, ge=0)
 
     @field_validator("category_affinities")
     @classmethod
@@ -75,6 +77,16 @@ class SegmentDefinition(BaseModel):
 
 # ── Computed feature types (output of feature_engineering.py) ─────────────────
 
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Normalize to aware UTC; naive values are assumed to already be UTC."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 @dataclass
 class UserFeatures:
     """Per-user behavioral features extracted from behavioral_events.
@@ -82,14 +94,14 @@ class UserFeatures:
     Computed over a rolling window defined by `SegmentDefinition.purchase_history_days`.
     """
 
-    user_id_hash:      str
-    page_view_count:   int
-    purchase_count:    int
-    session_count:     int
-    total_spent:       float
+    user_id_hash: str
+    page_view_count: int
+    purchase_count: int
+    session_count: int
+    total_spent: float
     category_diversity: int
-    last_activity:     datetime | None
-    window_days:       int
+    last_activity: datetime | None
+    window_days: int
 
     @property
     def purchase_frequency(self) -> float:
@@ -116,8 +128,7 @@ class UserFeatures:
         """Days since the user's last event (window_days if never seen)."""
         if self.last_activity is None:
             return float(self.window_days)
-        delta = datetime.utcnow() - self.last_activity.replace(tzinfo=None)
-        return max(delta.total_seconds() / 86_400, 0.0)
+        return max((_utcnow() - _as_utc(self.last_activity)).total_seconds() / 86_400, 0.0)
 
     def to_feature_vector(self) -> list[float]:
         """Return a fixed-length numeric feature vector for embedding input."""
@@ -143,11 +154,11 @@ class SegmentFeatureMatrix:
     Designed to be serialized via JSON for Airflow XCom inter-task transport.
     """
 
-    segment_id:   str
+    segment_id: str
     segment_name: str
-    window_days:  int
-    users:        list[UserFeatures] = field(default_factory=list)
-    computed_at:  datetime = field(default_factory=datetime.utcnow)
+    window_days: int
+    users: list[UserFeatures] = field(default_factory=list)
+    computed_at: datetime = field(default_factory=lambda: _utcnow())
 
     def __len__(self) -> int:
         return len(self.users)
@@ -157,18 +168,20 @@ class SegmentFeatureMatrix:
         if not self.users:
             return {}
 
-        import statistics
-
         vectors = [u.to_feature_vector() for u in self.users]
         feature_names = [
-            "purchase_frequency", "avg_basket_size", "conversion_rate",
-            "session_depth", "category_diversity", "recency_days",
+            "purchase_frequency",
+            "avg_basket_size",
+            "conversion_rate",
+            "session_depth",
+            "category_diversity",
+            "recency_days",
         ]
         stats: dict[str, float] = {}
         for i, name in enumerate(feature_names):
             vals = [v[i] for v in vectors]
             stats[f"{name}_mean"] = statistics.mean(vals)
-            stats[f"{name}_std"]  = statistics.stdev(vals) if len(vals) > 1 else 0.0
+            stats[f"{name}_std"] = statistics.stdev(vals) if len(vals) > 1 else 0.0
         return stats
 
     def to_text_description(self) -> str:
@@ -188,11 +201,11 @@ class SegmentFeatureMatrix:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "segment_id":   self.segment_id,
+            "segment_id": self.segment_id,
             "segment_name": self.segment_name,
-            "window_days":  self.window_days,
-            "users":        [u.to_dict() for u in self.users],
-            "computed_at":  self.computed_at.isoformat(),
+            "window_days": self.window_days,
+            "users": [u.to_dict() for u in self.users],
+            "computed_at": self.computed_at.isoformat(),
         }
 
     @classmethod

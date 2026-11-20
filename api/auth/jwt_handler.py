@@ -17,7 +17,7 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -26,27 +26,56 @@ logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-_SECRET    = os.getenv("JWT_SECRET", "dev-insecure-secret-change-in-production")
+_DEV_SECRETS = frozenset(
+    {
+        "dev-insecure-secret-change-in-production",
+        "dev-secret-change-in-production",
+        "dev-secret-change-in-prod",
+        "REPLACE_ME",
+    }
+)
+
+_SECRET = os.getenv("JWT_SECRET", "dev-insecure-secret-change-in-production")
 _ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-_ISSUER    = os.getenv("JWT_ISSUER")
-_AUDIENCE  = os.getenv("JWT_AUDIENCE")
-_EXPIRY    = int(os.getenv("JWT_EXPIRY_SECONDS", "3600"))
+_ISSUER = os.getenv("JWT_ISSUER")
+_AUDIENCE = os.getenv("JWT_AUDIENCE")
+TOKEN_EXPIRY_SECONDS = int(os.getenv("JWT_EXPIRY_SECONDS", "3600"))
 
 # Default org for development / backward-compatibility
 DEFAULT_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
+def assert_secure_config() -> None:
+    """Refuse to run in production with a well-known or too-short JWT secret.
+
+    Called from the API lifespan. A guessable HS256 secret lets anyone forge
+    admin tokens for any org, so this fails loudly instead of logging a warning.
+
+    Raises:
+        RuntimeError: If ENV=production and JWT_SECRET is a known default or
+            shorter than 32 characters (HS256 only).
+    """
+    if os.getenv("ENV", "development").lower() != "production":
+        return
+    if _ALGORITHM.startswith("HS") and (_SECRET in _DEV_SECRETS or len(_SECRET) < 32):
+        raise RuntimeError(
+            "JWT_SECRET is unset, a known development default, or shorter than 32 chars. "
+            "Set a high-entropy JWT_SECRET before running with ENV=production."
+        )
+
+
 # ── Token claims ──────────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class TokenClaims:
     """Decoded, validated JWT claims attached to each authenticated request."""
 
-    sub:    str                        # external user ID
-    email:  str
+    sub: str  # external user ID
+    email: str
     org_id: uuid.UUID
-    role:   str                        # admin | marketer | analyst | viewer
-    extra:  dict[str, object] = field(default_factory=dict)
+    role: str  # admin | marketer | analyst | viewer
+    extra: dict[str, object] = field(default_factory=dict)
 
     @property
     def is_admin(self) -> bool:
@@ -64,57 +93,53 @@ GUEST_CLAIMS = TokenClaims(
 
 # ── Encode (dev-token endpoint only) ─────────────────────────────────────────
 
+
 def encode_token(
     sub: str,
     email: str,
     org_id: uuid.UUID,
     role: str,
-    expiry_seconds: int = _EXPIRY,
+    expiry_seconds: int = TOKEN_EXPIRY_SECONDS,
 ) -> str:
     """Encode a JWT with the configured HS256 secret. Dev use only."""
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     payload: dict[str, object] = {
-        "sub":    sub,
-        "email":  email,
+        "sub": sub,
+        "email": email,
         "org_id": str(org_id),
-        "role":   role,
-        "iat":    now,
-        "exp":    now + timedelta(seconds=expiry_seconds),
+        "role": role,
+        "iat": now,
+        "exp": now + timedelta(seconds=expiry_seconds),
     }
     if _ISSUER:
         payload["iss"] = _ISSUER
     if _AUDIENCE:
         payload["aud"] = _AUDIENCE
-    return jwt.encode(payload, _SECRET, algorithm=_ALGORITHM)  # type: ignore[return-value]
+    return jwt.encode(payload, _SECRET, algorithm=_ALGORITHM)
 
 
 # ── Decode ────────────────────────────────────────────────────────────────────
 
+
 def decode_token(raw_token: str) -> TokenClaims:
     """Verify and decode a JWT.  Raises ``InvalidTokenError`` on failure."""
-    options: dict[str, object] = {}
-    if not _ISSUER:
-        options["verify_iss"] = False
-    if not _AUDIENCE:
-        options["verify_aud"] = False
+    payload = jwt.decode(
+        raw_token,
+        _SECRET,
+        algorithms=[_ALGORITHM],
+        issuer=_ISSUER or None,
+        audience=_AUDIENCE or None,
+        options={"verify_iss": bool(_ISSUER), "verify_aud": bool(_AUDIENCE)},
+    )
 
-    try:
-        payload = jwt.decode(
-            raw_token,
-            _SECRET,
-            algorithms=[_ALGORITHM],
-            issuer=_ISSUER or None,
-            audience=_AUDIENCE or None,
-            options=options,
-        )
-    except InvalidTokenError:
-        raise
-
+    # A token without org_id maps to the default org (single-tenant / dev tokens).
+    # A token with a *malformed* org_id is rejected: silently falling back would
+    # hand the caller another tenant's data.
     org_id_raw = payload.get("org_id", str(DEFAULT_ORG_ID))
     try:
         org_id = uuid.UUID(str(org_id_raw))
-    except ValueError:
-        org_id = DEFAULT_ORG_ID
+    except ValueError as exc:
+        raise InvalidTokenError("Token carries a malformed org_id claim.") from exc
 
     return TokenClaims(
         sub=str(payload.get("sub", "")),

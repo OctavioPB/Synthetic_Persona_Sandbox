@@ -33,13 +33,13 @@ logger = logging.getLogger(__name__)
 
 
 async def log_event(
-    db:            AsyncSession,
-    claims:        "TokenClaims",
-    action:        str,
+    db: AsyncSession,
+    claims: TokenClaims,
+    action: str,
     resource_type: str | None = None,
-    resource_id:   str | None = None,
-    request:       "Request | None" = None,
-    status_code:   int | None = None,
+    resource_id: str | None = None,
+    request: Request | None = None,
+    status_code: int | None = None,
 ) -> None:
     """Insert an audit event.  Silently swallows all errors."""
     from api.models.org import AuditEventORM
@@ -65,7 +65,7 @@ async def log_event(
         logger.warning("Audit log write failed (non-fatal): %s", exc)
 
 
-def _get_client_ip(request: "Request | None") -> str | None:
+def _get_client_ip(request: Request | None) -> str | None:
     if request is None:
         return None
     forwarded = request.headers.get("x-forwarded-for")
