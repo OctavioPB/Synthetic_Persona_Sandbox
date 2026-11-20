@@ -43,7 +43,7 @@ jobs:
           echo "dashboard_image=${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/spb-dashboard" >> $GITHUB_OUTPUT
 
       - name: Build & push API image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/Dockerfile.api
@@ -55,7 +55,7 @@ jobs:
           cache-to:   type=gha,mode=max
 
       - name: Build & push Dashboard image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: dashboard
           file: infra/docker/Dockerfile.dashboard
