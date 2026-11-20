@@ -80,7 +80,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@v5
 
       - name: Configure kubeconfig (staging)
         run: echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > /tmp/kubeconfig
@@ -168,7 +168,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@v5
 
       - name: Configure kubeconfig (production)
         run: echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > /tmp/kubeconfig
@@ -246,7 +246,7 @@ jobs:
 
     steps:
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@v5
 
       - name: Configure kubeconfig
         run: echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > /tmp/kubeconfig
