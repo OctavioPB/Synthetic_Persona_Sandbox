@@ -13,7 +13,7 @@ import json
 import logging
 import struct
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 
 import fastavro
 import requests
@@ -136,7 +136,10 @@ class SchemaRegistryClient:
         schema_id: int = struct.unpack(_SCHEMA_ID_FMT, data[1:5])[0]
         writer_schema = self.get_schema_by_id(schema_id)
         buf = BytesIO(data[5:])
-        record: dict[str, Any] = fastavro.schemaless_reader(
-            buf, fastavro.parse_schema(writer_schema)
+        # Newer fastavro stubs type the result as a wide union; a record schema
+        # always decodes to a dict.
+        record = cast(
+            "dict[str, Any]",
+            fastavro.schemaless_reader(buf, fastavro.parse_schema(writer_schema), None),
         )
         return schema_id, record
