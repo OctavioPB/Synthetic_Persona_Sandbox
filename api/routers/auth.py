@@ -115,6 +115,9 @@ async def create_api_key(
 
     raw_key = f"spb_{secrets.token_urlsafe(32)}"
     key_prefix = raw_key[:12]
+    # API keys are 256-bit random tokens, not user-chosen passwords: a fast hash is
+    # correct here (a slow KDF only protects low-entropy secrets and would add
+    # latency to every authenticated request).
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
 
     expires_at = None

@@ -85,6 +85,9 @@ async def _validate_api_key(raw_key: str, db: AsyncSession) -> TokenClaims | Non
     """Look up an API key by its SHA-256 hash, return TokenClaims if valid."""
     from api.models.org import ApiKeyORM
 
+    # API keys are 256-bit random tokens, not user-chosen passwords: a fast hash is
+    # correct here (a slow KDF only protects low-entropy secrets and would add
+    # latency to every authenticated request).
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     result = await db.execute(
         select(ApiKeyORM).where(
