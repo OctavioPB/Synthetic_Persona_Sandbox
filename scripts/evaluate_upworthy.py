@@ -73,7 +73,8 @@ INPUT_USD_PER_MTOK = 3.00
 OUTPUT_USD_PER_MTOK = 15.00
 TYPICAL_OUTPUT_TOKENS = 150  # assumption, replaced by measured usage in a real run
 
-ARMS = ("persona", "persona_click", "goal_click", "baseline")
+ARMS = ("persona", "persona_click", "goal_click", "medium_click", "baseline")
+MEDIUM = "news headline"
 
 # persona_click = the application's persona prompt with only the outcome reworded
 # from purchasing to clicking, so persona vs persona_click isolates the wording.
@@ -221,6 +222,10 @@ def arm_prompts() -> dict[str, str]:
         # The wording the application ships for stimuli with goal="click".
         "goal_click": PersonaContextBuilder().build_system_prompt(
             SEGMENT_NAME, SEGMENT_DEFINITION, goal="click"
+        ),
+        # The same, with the campaign's medium stated, as a user would set it.
+        "medium_click": PersonaContextBuilder().build_system_prompt(
+            SEGMENT_NAME, SEGMENT_DEFINITION, goal="click", medium=MEDIUM
         ),
         "baseline": BASELINE_SYSTEM,
     }
@@ -452,6 +457,10 @@ def report(results: Sequence[dict[str, Any]], spent: float) -> None:
             ("persona_click", "persona"),
             ("goal_click", "persona"),
             ("goal_click", "baseline"),
+            ("goal_click", "persona_click"),
+            ("medium_click", "goal_click"),
+            ("medium_click", "persona_click"),
+            ("medium_click", "baseline"),
         ]
         if a in credit and b in credit
     ]

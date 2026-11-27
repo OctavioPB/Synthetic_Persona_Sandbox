@@ -80,6 +80,7 @@ export default function StimulusBuilder({ onConfirm, onCancel }: Props): React.J
   const [variantName, setVariantName] = useState('')
   const [stimType, setStimType] = useState<StimulusType>('ad_copy')
   const [goal, setGoal]         = useState<StimulusGoal>('purchase')
+  const [medium, setMedium]     = useState('')
 
   const [headline, setHeadline]         = useState('')
   const [bodyCopy, setBodyCopy]         = useState('')
@@ -128,7 +129,12 @@ export default function StimulusBuilder({ onConfirm, onCancel }: Props): React.J
         ...(expiryDays ? { expiry_days: parseInt(expiryDays, 10) } : {}),
       }
     }
-    onConfirm(variantName.trim(), { ...stimulus, goal })
+    const cleanMedium = medium.trim()
+    onConfirm(variantName.trim(), {
+      ...stimulus,
+      goal,
+      ...(cleanMedium ? { medium: cleanMedium } : {}),
+    })
   }
 
   return (
@@ -255,6 +261,18 @@ export default function StimulusBuilder({ onConfirm, onCancel }: Props): React.J
             <option key={id} value={id}>{lbl}</option>
           ))}
         </select>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label htmlFor="stimulus-medium" style={label}>Where it's seen (optional)</label>
+        <input
+          id="stimulus-medium"
+          style={input}
+          value={medium}
+          maxLength={60}
+          placeholder="e.g. news headline, email subject line, Instagram ad"
+          onChange={(e) => setMedium(e.target.value.replace(/[\r\n]/g, ' '))}
+        />
       </div>
 
       {/* Actions */}

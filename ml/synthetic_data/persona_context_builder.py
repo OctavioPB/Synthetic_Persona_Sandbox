@@ -40,7 +40,7 @@ These statistics are derived from {user_count} real users in this segment:
 {category_interests}
 
 ## Response Instructions
-When presented with a marketing stimulus, react authentically as this persona.{goal_line}
+When presented with a marketing stimulus, react authentically as this persona.{goal_line}{medium_line}
 
 Your response MUST be a single valid JSON object with exactly this structure:
 {schema}
@@ -109,6 +109,7 @@ class PersonaContextBuilder:
         feature_stats: dict[str, float] | None = None,
         user_count: int = 0,
         goal: Goal = "purchase",
+        medium: str | None = None,
     ) -> str:
         """Construct the full system prompt for a persona.
 
@@ -120,6 +121,8 @@ class PersonaContextBuilder:
             user_count:    Number of users the stats were computed from.
             goal:          What counts as success for the stimulus; sets how the
                            calibration scale is described.
+            medium:        Where the stimulus is seen (e.g. "news headline"). None
+                           leaves the prompt exactly as without it.
 
         Returns:
             A multi-paragraph system prompt string, ready for the Claude API.
@@ -135,6 +138,7 @@ class PersonaContextBuilder:
             behavioral_stats=behavioral_stats,
             category_interests=category_interests,
             schema=_RESPONSE_SCHEMA,
+            medium_line=f"\nThe stimulus is shown to you as: {medium}." if medium else "",
             **_GOAL_WORDING[goal],
         )
         logger.debug(

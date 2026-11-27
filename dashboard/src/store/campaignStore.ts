@@ -7,6 +7,8 @@ export type StimulusGoal = 'purchase' | 'click' | 'signup'
 
 interface StimulusBase {
   goal?: StimulusGoal
+  /** Where the stimulus is seen, e.g. "news headline" (optional, one line, max 60 chars). */
+  medium?: string
 }
 
 export interface AdCopyStimulus extends StimulusBase {

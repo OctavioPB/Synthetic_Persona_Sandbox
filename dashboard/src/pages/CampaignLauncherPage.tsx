@@ -557,6 +557,7 @@ export default function CampaignLauncherPage({ onLaunchComplete, onCancel }: Pro
                           fontWeight: 700,
                         }}>
                           {v.stimulus.type.replace('_', ' ')} · {v.stimulus.goal ?? 'purchase'}
+                          {v.stimulus.medium ? ` · ${v.stimulus.medium}` : ''}
                         </span>
                         <span style={{ fontFamily: 'var(--fb)', fontSize: 13, color: 'var(--dark)', fontWeight: 500 }}>
                           {v.name}

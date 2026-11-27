@@ -15,7 +15,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _utcnow() -> datetime:
@@ -34,6 +34,19 @@ class StimulusType:
 # What a stimulus is trying to get the persona to do. It sets how the persona
 # prompt describes "likelihood_to_convert"; purchase is the original behaviour.
 Goal = Literal["purchase", "click", "signup"]
+
+# Where the persona meets the stimulus, e.g. "news headline" or "email subject
+# line". Optional free text, one line. On Upworthy headlines, naming the medium
+# was the main difference between the best and the shipped click wording.
+Medium = Annotated[str, Field(min_length=1, max_length=60, pattern=r"^[^\r\n]+$")]
+_MEDIUM_DESCRIPTION = "Where the stimulus is seen, e.g. 'news headline' or 'email subject line'"
+
+
+def _blank_to_none(value: object) -> object:
+    if isinstance(value, str):
+        value = value.strip()
+        return value or None
+    return value
 
 
 # ── Concrete stimulus models ───────────────────────────────────────────────────
@@ -56,7 +69,10 @@ class AdCopyStimulus(BaseModel):
         default="purchase",
         description="What counts as success: purchase (default), click or signup",
     )
+    medium: Medium | None = Field(default=None, description=_MEDIUM_DESCRIPTION)
     created_at: datetime = Field(default_factory=_utcnow)
+
+    _clean_medium = field_validator("medium", mode="before")(_blank_to_none)
 
 
 class PriceChangeStimulus(BaseModel):
@@ -72,7 +88,10 @@ class PriceChangeStimulus(BaseModel):
         default="purchase",
         description="What counts as success: purchase (default), click or signup",
     )
+    medium: Medium | None = Field(default=None, description=_MEDIUM_DESCRIPTION)
     created_at: datetime = Field(default_factory=_utcnow)
+
+    _clean_medium = field_validator("medium", mode="before")(_blank_to_none)
 
     @model_validator(mode="after")
     def check_prices_differ(self) -> PriceChangeStimulus:
@@ -105,7 +124,10 @@ class PromoStimulus(BaseModel):
         default="purchase",
         description="What counts as success: purchase (default), click or signup",
     )
+    medium: Medium | None = Field(default=None, description=_MEDIUM_DESCRIPTION)
     created_at: datetime = Field(default_factory=_utcnow)
+
+    _clean_medium = field_validator("medium", mode="before")(_blank_to_none)
 
     @model_validator(mode="after")
     def check_percent_range(self) -> PromoStimulus:

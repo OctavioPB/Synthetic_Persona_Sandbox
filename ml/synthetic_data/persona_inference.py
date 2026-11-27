@@ -114,6 +114,7 @@ class PersonaInferenceService:
             feature_stats=feature_stats,
             user_count=user_count,
             goal=stimulus.goal,
+            medium=stimulus.medium,
         )
         user_message = format_stimulus_prompt(stimulus)
 

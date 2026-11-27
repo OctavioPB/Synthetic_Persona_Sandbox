@@ -50,6 +50,27 @@ def test_other_goals_replace_the_purchase_wording(goal: str, expected: str) -> N
     assert "basket-size" not in prompt
 
 
+def test_no_medium_leaves_the_prompt_unchanged() -> None:
+    assert _prompt(goal="click") == _prompt(goal="click", medium=None)
+    assert "shown to you as" not in _prompt(goal="click")
+
+
+def test_medium_is_stated_in_the_prompt() -> None:
+    prompt = _prompt(goal="click", medium="news headline")
+    assert "The stimulus is shown to you as: news headline." in prompt
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_blank_medium_becomes_none(value: str) -> None:
+    assert AdCopyStimulus(headline="H", body_copy="B", cta="Go", medium=value).medium is None
+
+
+@pytest.mark.parametrize("value", ["line one\nline two", "x" * 61])
+def test_multiline_or_long_medium_is_rejected(value: str) -> None:
+    with pytest.raises(ValidationError):
+        AdCopyStimulus(headline="H", body_copy="B", cta="Go", medium=value)
+
+
 class _RecordingClient:
     def __init__(self) -> None:
         self.system = ""
@@ -63,6 +84,9 @@ class _RecordingClient:
 def test_inference_passes_the_stimulus_goal_to_the_prompt() -> None:
     client = _RecordingClient()
     service = PersonaInferenceService(client=client)  # type: ignore[arg-type]
-    stimulus = AdCopyStimulus(headline="H", body_copy="B", cta="Go", goal="signup")
+    stimulus = AdCopyStimulus(
+        headline="H", body_copy="B", cta="Go", goal="signup", medium="email subject line"
+    )
     service.generate("id", "Seg", DEFINITION, stimulus)
     assert "The goal is a sign-up" in client.system
+    assert "shown to you as: email subject line." in client.system
