@@ -30,6 +30,7 @@ ties share the credit. Each stimulus is scored once, at temperature 0.7.
 | `persona` | The app's persona prompt, unchanged (purchase wording) |
 | `persona_click` | The same prompt with the outcome hand-reworded to clicking |
 | `goal_click` | The prompt the app now builds for `goal="click"` |
+| `medium_click` | The same, with `medium="news headline"` set |
 | `baseline` | A short prompt with no persona, asking how likely a reader is to click |
 | Random | Expected score of picking a headline at random |
 
@@ -42,8 +43,9 @@ between versions are paired by test.
 
 ### Qwen 3 4B (local, Ollama), 200 tests
 
-Runs `20261126-3arm` and `20261126-qwen-4arm`. The second run added `goal_click`; the other
-three versions came from the cache and were not re-sampled. 0 failures, about 1.2 seconds per call.
+Runs `20261126-3arm`, `20261126-qwen-4arm` and `20261126-qwen-5arm`. Each later run added one
+version and took the others from the cache, so they were not re-sampled. 0 failures, about 1.2
+seconds per call.
 
 | Version | Picked the winner | 95% interval | Tied top scores |
 |---------|-------------------|--------------|-----------------|
@@ -51,6 +53,7 @@ three versions came from the cache and were not re-sampled. 0 failures, about 1.
 | `persona` | 27.8% | 22.8–32.8% | 85 / 200 |
 | `persona_click` | 36.0% | 30.4–41.7% | 83 / 200 |
 | `goal_click` | 30.3% | 24.7–35.7% | 72 / 200 |
+| `medium_click` | 32.6% | 27.2–38.4% | 59 / 200 |
 | `baseline` | 39.9% | 34.1–45.4% | 92 / 200 |
 
 | Difference | Points | 95% interval |
@@ -61,6 +64,9 @@ three versions came from the cache and were not re-sampled. 0 failures, about 1.
 | `goal_click` − `persona` | +2.5 | −1.0 to +6.2 |
 | `goal_click` − `persona_click` | −5.7 | −10.4 to −1.3 |
 | `goal_click` − `baseline` | −9.5 | −14.6 to −4.7 |
+| `medium_click` − `goal_click` | +2.3 | −1.5 to +6.4 |
+| `medium_click` − `persona_click` | −3.4 | −7.2 to +0.5 |
+| `medium_click` − `baseline` | −7.3 | −12.0 to −2.5 |
 
 **Why the shipped click wording scores lower.** `goal_click` and `persona_click` differ in
 only four lines. The hand rewording describes the stimulus as a news headline and the person
@@ -68,6 +74,13 @@ as a reader ("click it to read the story"). The app's wording has to fit any cam
 is generic ("click the stimulus to see more", "a typical member"). The hand rewording was
 also written knowing the data were news headlines, so part of its lead may come from
 tailoring the wording to this data.
+
+**Does stating the medium close the gap?** Partly. Adding the stimulus `medium` field
+("news headline") adds one line to the app's prompt. It recovered about 2.3 of the 5.7
+points, cut top-score ties from 72 to 59, and left `medium_click` 3.4 points behind
+`persona_click`. Neither difference is significant at 200 tests. The rest of the gap may
+come from the hand rewording's other changes ("read the story", "reader") or from
+tailoring it to this data. `medium_click` is still 7.3 points below the plain prompt.
 
 ### Claude Sonnet 4.6, 10 tests (smoke test)
 
@@ -107,7 +120,7 @@ tests. Read interim numbers as noise.
 
 ### Not yet measured
 
-- `goal_click` on Gemma and Claude.
+- `goal_click` and `medium_click` on Gemma and Claude.
 - Claude at 200 tests (about $8 estimated).
 
 ## Conclusions so far
@@ -116,8 +129,8 @@ tests. Read interim numbers as noise.
    Switching to click wording added 8.3 points for Qwen, a significant gain, and 4.5 points for Gemma, which is not significant.
    This finding led to the stimulus `goal` field.
    The generic click wording the app ships recovers only part of that gain: +2.5 points
-   for Qwen, not significant. Describing the medium ("a news headline", "a reader")
-   seems to matter as much as naming the goal.
+   for Qwen, not significant. Stating the medium as well brings it to +4.8, still short
+   of the hand rewording's +8.3.
 2. **The persona does worse than a plain prompt.** On both models, the plain prompt
    beat the persona with either wording. The gap is significant for 3 of the 4 comparisons.
    The persona may still help on purchase data, real segments or behavioral detail, but this data can't test that.
@@ -159,6 +172,7 @@ finished. Runs are kept under `data/upworthy/runs/`, which git ignores.
 | `d22ace0e5f159640` | `persona` |
 | `abb2710b85a72f4f` | `persona_click` |
 | `227cf77dc2b956ce` | `goal_click` |
+| `fc38ef909e494a0d` | `medium_click` |
 | `d7fdcdefb06dd6b8` | `baseline` |
 
 A different fingerprint means the prompt changed and the result belongs to a different

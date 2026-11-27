@@ -44,6 +44,10 @@ how the calibration scale and its guidance are worded, for example "extremely li
 purchase immediately" or "extremely likely to click right away". The default prompt is
 byte-for-byte what it was before goals existed, so earlier results stay comparable.
 
+A stimulus can also state its **medium**, such as "news headline" or "email subject line".
+This is optional free text of one line and at most 60 characters. It adds one sentence to the
+prompt. When it is left out, the prompt is unchanged.
+
 Choose the goal the campaign is really after. On Upworthy headlines, where clicks are the
 real outcome, purchase wording picked the winning headline in 27.8% of 200 tests, against
 36.0% for click wording (Qwen 3 4B; random choice 28.6%). See [EVALUATION.md](EVALUATION.md).
@@ -101,6 +105,8 @@ What this supports:
   (interval −8.5 to +0.5) and by 7.0 points for Gemma (interval −13.5 to −0.1).
 - **The app's own click wording helps less.** The generic `goal="click"` prompt scored 30.3%
   for Qwen, 5.7 points below the hand-written news-specific wording (interval −10.4 to −1.3).
+  Setting `medium="news headline"` raised it to 32.6%. That is +2.3 points, and the
+  interval is −1.5 to +6.4.
 - **A larger local model didn't help.** Gemma 26B scored below Qwen 4B with every prompt.
 - **Claude is unmeasured at a useful scale.** Ten tests only showed that the pipeline works.
 
@@ -122,9 +128,10 @@ races between variants.
 
 ## Recommended next steps
 
-1. Let a campaign describe its medium (for example "news headline" or "email subject
-   line") in the prompt, and measure whether that closes the gap between `goal_click` and
-   `persona_click`.
+The full plan, with the published evidence behind it, is in [RESEARCH.md](RESEARCH.md).
+
+1. Measure `medium_click` on a second model to see whether its small gain holds, and test
+   medium-specific wording beyond a single sentence.
 2. Run the full 200-test evaluation on Claude, the model the app uses.
 3. Pass behavioral aggregates on the interactive path.
 4. Reduce ties by sampling several replies per variant, or by comparing variants in pairs.

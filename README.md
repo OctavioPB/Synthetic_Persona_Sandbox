@@ -53,6 +53,7 @@ Use it as a fast first filter to drop weak variants before a live A/B test. Scor
 | [Engineering](docs/ENGINEERING.md) | Toolchain, tests, CI, conventions, known gaps |
 | [Applied AI](docs/APPLIED_AI.md) | Prompting, scoring, evaluation status, limitations |
 | [Evaluation](docs/EVALUATION.md) | Method, results on real A/B tests, how to reproduce |
+| [Research Roadmap](docs/RESEARCH.md) | Published evidence, techniques to try, and the plan |
 | [Lessons Learned](docs/LESSONS_LEARNED.md) | Bugs found and the rules they left |
 | [Business Value](docs/BUSINESS_VALUE.md) | Problem, fit, limits and how to prove value |
 | [API reference](docs/api/README.md) | Endpoints |

@@ -52,6 +52,7 @@ Measured on real headline A/B tests where the winner is known (details in
   real outcome was clicks, it picked the winner no more often than chance. Asking about
   clicks instead added 4 to 8 points, depending on the model. Variants now carry a goal for this reason.
   The generic click wording the app ships recovered only about 2.5 of those points.
+  Stating where the stimulus is seen (for example "news headline") brought it to about 5 points.
 - **The persona has not beaten a plain prompt.** On two local models, a small one and a larger one, a short
   prompt without a persona picked the winner more often.
 - **The model the platform uses (Claude) has only been smoke-tested** on 10 tests. A
