@@ -21,7 +21,9 @@ dependencies = [
     "qdrant-client>=1.9.0",
     "kafka-python>=2.0.0",
     "fastavro>=1.9.0",
-    "anthropic>=0.40.0",
+    # <1: SDK 1.0 removes the `temperature` argument that claude_client.py sends, and
+    # 2.0 moves to an API version that rejects it. Lift the cap only with that change.
+    "anthropic>=0.40.0,<1",
     "sentence-transformers>=3.0.0",
     "tenacity>=8.0.0",
     "python-dotenv>=1.0.0",

@@ -7,6 +7,10 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore"
+    ignore:
+      # 1.0 removes the `temperature` argument the Claude client sends; see pyproject.toml.
+      - dependency-name: "anthropic"
+        versions: [">=1.0.0"]
 
   - package-ecosystem: "npm"
     directory: "/dashboard"
