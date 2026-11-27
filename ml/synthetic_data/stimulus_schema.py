@@ -31,6 +31,11 @@ class StimulusType:
     PROMO = "promo"
 
 
+# What a stimulus is trying to get the persona to do. It sets how the persona
+# prompt describes "likelihood_to_convert"; purchase is the original behaviour.
+Goal = Literal["purchase", "click", "signup"]
+
+
 # ── Concrete stimulus models ───────────────────────────────────────────────────
 
 
@@ -47,6 +52,10 @@ class AdCopyStimulus(BaseModel):
         default=None,
         description="Text description of the ad visual for context",
     )
+    goal: Goal = Field(
+        default="purchase",
+        description="What counts as success: purchase (default), click or signup",
+    )
     created_at: datetime = Field(default_factory=_utcnow)
 
 
@@ -59,6 +68,10 @@ class PriceChangeStimulus(BaseModel):
     original_price: float = Field(gt=0)
     new_price: float = Field(gt=0)
     currency: str = "USD"
+    goal: Goal = Field(
+        default="purchase",
+        description="What counts as success: purchase (default), click or signup",
+    )
     created_at: datetime = Field(default_factory=_utcnow)
 
     @model_validator(mode="after")
@@ -88,6 +101,10 @@ class PromoStimulus(BaseModel):
     minimum_purchase: float | None = Field(default=None, ge=0)
     expiry_days: int | None = Field(default=None, ge=1)
     applicable_categories: list[str] = Field(default_factory=list)
+    goal: Goal = Field(
+        default="purchase",
+        description="What counts as success: purchase (default), click or signup",
+    )
     created_at: datetime = Field(default_factory=_utcnow)
 
     @model_validator(mode="after")

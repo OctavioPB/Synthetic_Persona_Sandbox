@@ -2,21 +2,28 @@ import { create } from 'zustand'
 
 export type StimulusType = 'ad_copy' | 'price_change' | 'promo'
 
-export interface AdCopyStimulus {
+/** What counts as success for a stimulus; the API defaults to 'purchase'. */
+export type StimulusGoal = 'purchase' | 'click' | 'signup'
+
+interface StimulusBase {
+  goal?: StimulusGoal
+}
+
+export interface AdCopyStimulus extends StimulusBase {
   type: 'ad_copy'
   headline: string
   body_copy: string
   cta: string
 }
 
-export interface PriceChangeStimulus {
+export interface PriceChangeStimulus extends StimulusBase {
   type: 'price_change'
   product_name: string
   original_price: number
   new_price: number
 }
 
-export interface PromoStimulus {
+export interface PromoStimulus extends StimulusBase {
   type: 'promo'
   promo_code: string
   discount_value: number

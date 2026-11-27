@@ -113,6 +113,7 @@ class PersonaInferenceService:
             definition=definition,
             feature_stats=feature_stats,
             user_count=user_count,
+            goal=stimulus.goal,
         )
         user_message = format_stimulus_prompt(stimulus)
 

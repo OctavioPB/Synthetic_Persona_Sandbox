@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { StimulusPayload, StimulusType } from '../store/campaignStore'
+import { StimulusGoal, StimulusPayload, StimulusType } from '../store/campaignStore'
 
 interface Props {
   onConfirm: (variantName: string, stimulus: StimulusPayload) => void
@@ -10,6 +10,14 @@ const TYPES: Array<{ id: StimulusType; label: string; desc: string }> = [
   { id: 'ad_copy',      label: 'Ad Copy',     desc: 'Headline, body copy & CTA' },
   { id: 'price_change', label: 'Price Change', desc: 'Simulate a product price drop' },
   { id: 'promo',        label: 'Promo Code',   desc: 'Discount code offer' },
+]
+
+// The persona scores the likelihood of this outcome, so it should match what the
+// campaign is actually trying to get people to do.
+const GOALS: Array<{ id: StimulusGoal; label: string }> = [
+  { id: 'purchase', label: 'Purchase' },
+  { id: 'click',    label: 'Click' },
+  { id: 'signup',   label: 'Sign-up' },
 ]
 
 const label: React.CSSProperties = {
@@ -71,6 +79,7 @@ function Field({
 export default function StimulusBuilder({ onConfirm, onCancel }: Props): React.JSX.Element {
   const [variantName, setVariantName] = useState('')
   const [stimType, setStimType] = useState<StimulusType>('ad_copy')
+  const [goal, setGoal]         = useState<StimulusGoal>('purchase')
 
   const [headline, setHeadline]         = useState('')
   const [bodyCopy, setBodyCopy]         = useState('')
@@ -119,7 +128,7 @@ export default function StimulusBuilder({ onConfirm, onCancel }: Props): React.J
         ...(expiryDays ? { expiry_days: parseInt(expiryDays, 10) } : {}),
       }
     }
-    onConfirm(variantName.trim(), stimulus)
+    onConfirm(variantName.trim(), { ...stimulus, goal })
   }
 
   return (
@@ -233,6 +242,20 @@ export default function StimulusBuilder({ onConfirm, onCancel }: Props): React.J
           <Field label="Expiry (days, optional)" type="number" value={expiryDays} onChange={setExpiryDays} placeholder="7" />
         </>
       )}
+
+      <div style={{ marginBottom: 14 }}>
+        <label htmlFor="stimulus-goal" style={label}>Success means</label>
+        <select
+          id="stimulus-goal"
+          style={input}
+          value={goal}
+          onChange={(e) => setGoal(e.target.value as StimulusGoal)}
+        >
+          {GOALS.map(({ id, label: lbl }) => (
+            <option key={id} value={id}>{lbl}</option>
+          ))}
+        </select>
+      </div>
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>

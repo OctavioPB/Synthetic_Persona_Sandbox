@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ml.synthetic_data.stimulus_schema import Goal
+
 logger = logging.getLogger(__name__)
 
 _RESPONSE_SCHEMA = """\
@@ -38,24 +40,60 @@ These statistics are derived from {user_count} real users in this segment:
 {category_interests}
 
 ## Response Instructions
-When presented with a marketing stimulus, react authentically as this persona.
+When presented with a marketing stimulus, react authentically as this persona.{goal_line}
 
 Your response MUST be a single valid JSON object with exactly this structure:
 {schema}
 
 Guidelines for calibration:
-- "likelihood_to_convert" of 0.9-1.0 = extremely likely to purchase immediately
-- "likelihood_to_convert" of 0.6-0.8 = interested, may convert with follow-up
+- "likelihood_to_convert" of 0.9-1.0 = {top}
+- "likelihood_to_convert" of 0.6-0.8 = {high}
 - "likelihood_to_convert" of 0.3-0.5 = somewhat interested but unconvinced
-- "likelihood_to_convert" of 0.0-0.2 = unlikely to convert, may disengage
-- Calibrate against the persona's behavioral profile: a high-purchase-frequency,
-  high-basket-size persona responds better to premium/quality messaging.
-- A low-conversion-rate persona is naturally skeptical; require compelling value.
+- "likelihood_to_convert" of 0.0-0.2 = {low}
+- Calibrate against the persona's behavioral profile: {profile}
+- {skeptic}
 - Match "sentiment" with the tone of "verbatim_response".
 - List 1-2 specific factors that most influenced your reaction in "key_factors".
 
 Return ONLY the JSON object — no markdown fencing, no preamble, no explanation.\
 """
+
+
+# Wording per goal. "purchase" reproduces the original prompt byte for byte.
+# Why it matters: on Upworthy headline tests, where clicks are the real outcome,
+# the purchase wording picked the winner less often than a click rewording
+# (Qwen 3 4B, 200 tests: 27.8% vs 36.0%). That rewording was close to, not the
+# same as, the "click" text here; scripts/evaluate_upworthy.py measures this one
+# as the goal_click arm.
+_GOAL_WORDING: dict[str, dict[str, str]] = {
+    "purchase": {
+        "goal_line": "",
+        "top": "extremely likely to purchase immediately",
+        "high": "interested, may convert with follow-up",
+        "low": "unlikely to convert, may disengage",
+        "profile": "a high-purchase-frequency,\n  high-basket-size persona responds better "
+        "to premium/quality messaging.",
+        "skeptic": "A low-conversion-rate persona is naturally skeptical; require compelling value.",
+    },
+    "click": {
+        "goal_line": '\nThe goal is a click: "likelihood_to_convert" is the probability that you '
+        "click the stimulus to see more.",
+        "top": "extremely likely to click right away",
+        "high": "interested, likely to click",
+        "low": "unlikely to click, would scroll past",
+        "profile": "react as a typical member\n  of this segment would.",
+        "skeptic": "People skip content that feels generic; require a compelling reason to click.",
+    },
+    "signup": {
+        "goal_line": '\nThe goal is a sign-up: "likelihood_to_convert" is the probability that '
+        "you sign up (for example a newsletter, an account or a trial).",
+        "top": "extremely likely to sign up right away",
+        "high": "interested, likely to sign up",
+        "low": "unlikely to sign up, would ignore it",
+        "profile": "react as a typical member\n  of this segment would.",
+        "skeptic": "People avoid sign-ups that ask a lot for little; require a clear benefit.",
+    },
+}
 
 
 class PersonaContextBuilder:
@@ -70,6 +108,7 @@ class PersonaContextBuilder:
         definition: dict[str, Any],
         feature_stats: dict[str, float] | None = None,
         user_count: int = 0,
+        goal: Goal = "purchase",
     ) -> str:
         """Construct the full system prompt for a persona.
 
@@ -79,6 +118,8 @@ class PersonaContextBuilder:
             feature_stats: Aggregate stats from SegmentFeatureMatrix.aggregate_stats().
                            If None, behavioral section uses generic language.
             user_count:    Number of users the stats were computed from.
+            goal:          What counts as success for the stimulus; sets how the
+                           calibration scale is described.
 
         Returns:
             A multi-paragraph system prompt string, ready for the Claude API.
@@ -94,6 +135,7 @@ class PersonaContextBuilder:
             behavioral_stats=behavioral_stats,
             category_interests=category_interests,
             schema=_RESPONSE_SCHEMA,
+            **_GOAL_WORDING[goal],
         )
         logger.debug(
             "Built system prompt for '%s' (~%d tokens).",
