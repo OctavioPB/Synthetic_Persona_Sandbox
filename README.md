@@ -17,7 +17,7 @@
 
 ## What is this?
 
-The Synthetic Persona Sandbox lets marketing teams simulate how a specific customer segment would respond to an ad, a price change, or a promotional offer. It builds synthetic personas from behavioral data and uses LLMs (Claude) to generate realistic, segment-specific responses. Results include a **conversion score**, sentiment analysis, and the persona's verbatim reaction.
+The Synthetic Persona Sandbox lets marketing teams simulate how a specific customer segment would respond to an ad, a price change, or a promotional offer. It describes each segment as a synthetic persona and asks an LLM (Claude) how that persona would react. Results include a **conversion score**, sentiment analysis, and the persona's verbatim reaction.
 
 **Core loop:**
 
@@ -25,7 +25,38 @@ The Synthetic Persona Sandbox lets marketing teams simulate how a specific custo
 Define segment → Build ad variant → Launch simulation → Read conversion score
 ```
 
-Instead of waiting weeks for A/B test results, a marketer can run 10 variants against 5 segments in under 5 minutes, identify the weakest performers, and go to production with only the top candidates.
+Use it as a fast first filter to drop weak variants before a live A/B test. Scores have not been validated against real campaign results.
+
+---
+
+## Screenshots
+
+*Taken from a local instance with randomly generated demo data.*
+
+| Dashboard | Analytics |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Analytics](docs/screenshots/analytics.png) |
+| **Segments** | **Segment detail** |
+| ![Segments](docs/screenshots/segments.png) | ![Segment detail](docs/screenshots/segment-detail.png) |
+| **Segment builder** | **Campaign launcher** |
+| ![Segment builder](docs/screenshots/segment-builder.png) | ![Campaign launcher](docs/screenshots/campaign-launcher.png) |
+| **Admin (demo data)** | |
+| ![Admin](docs/screenshots/admin.png) | |
+
+---
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [Architecture](docs/ARCHITECTURE.md) | Components, request flow, data stores, security boundaries |
+| [Engineering](docs/ENGINEERING.md) | Toolchain, tests, CI, conventions, known gaps |
+| [Applied AI](docs/APPLIED_AI.md) | Prompting, scoring, evaluation status, limitations |
+| [Evaluation](docs/EVALUATION.md) | Method, results on real A/B tests, how to reproduce |
+| [Lessons Learned](docs/LESSONS_LEARNED.md) | Bugs found and the rules they left |
+| [Business Value](docs/BUSINESS_VALUE.md) | Problem, fit, limits and how to prove value |
+| [API reference](docs/api/README.md) | Endpoints |
+| [First simulation](docs/guides/first_simulation.md) | Walkthrough |
 
 ---
 
@@ -44,7 +75,7 @@ Instead of waiting weeks for A/B test results, a marketer can run 10 variants ag
 │  ML / AI LAYER                                                      │
 │  Segment embeddings (sentence-transformers → Qdrant)                │
 │  Persona inference (Claude claude-sonnet-4-6 via Anthropic API)     │
-│  Conversion scorer (logistic model on LLM output features)          │
+│  Conversion scorer (LLM likelihood + sentiment adjustment)          │
 ├─────────────────────────────────────────────────────────────────────┤
 │  API LAYER                                                          │
 │  FastAPI (async) · ARQ job queue · WebSocket progress stream        │
@@ -72,7 +103,7 @@ Instead of waiting weeks for A/B test results, a marketer can run 10 variants ag
 | **Job queue** | ARQ (async Redis queue) | 0.26+ |
 | **AI inference** | Anthropic Claude (`claude-sonnet-4-6`) | anthropic 0.40+ |
 | **Embeddings** | `all-MiniLM-L6-v2` via sentence-transformers | 3.0+ |
-| **Auth** | PyJWT (HS256 dev / RS256 prod) | 2.8+ |
+| **Auth** | PyJWT (HS256) | 2.8+ |
 | **Frontend** | React 18 + TypeScript + Vite | Node 20 |
 | **State management** | Zustand | 4+ |
 | **Charts** | Recharts | 2+ |
@@ -113,7 +144,7 @@ synthetic-persona-sandbox/
 │   │   ├── db.py                 # SQLAlchemy async session, Base
 │   │   ├── metrics.py            # Prometheus counters and histograms
 │   │   ├── queue.py              # ARQ pool singleton + QueueDep
-│   │   └── rate_limiter.py       # Sliding-window rate limiter (10 req/min/org)
+│   │   └── rate_limiter.py       # Fixed-window rate limiter (60 req/min/org)
 │   ├── main.py                   # FastAPI app, middleware, router registration
 │   └── worker.py                 # ARQ worker entry point
 │
@@ -184,7 +215,6 @@ synthetic-persona-sandbox/
 │   │   ├── test_pipeline.py      # Kafka → Redis → API flow
 │   │   ├── test_simulation_pipeline.py
 │   │   └── test_regression.py    # Full regression suite (Sprint 10)
-│   ├── simulation/               # Simulation smoke tests
 │   └── load/
 │       └── locustfile.py         # Load test: 20 concurrent simulations
 │
@@ -207,23 +237,18 @@ synthetic-persona-sandbox/
 │   │   └── backup/               # pg_dump CronJob → S3
 │   └── terraform/                # Cloud environment definitions (dev/staging/prod)
 │
-├── docs/
-│   ├── api/README.md             # Full API endpoint reference
-│   ├── guides/first_simulation.md
-│   ├── release/ga_checklist.md   # Go/No-Go checklist
-│   └── security/
-│       ├── owasp_checklist.md    # OWASP Top 10 mitigations
-│       └── soc2_controls.md      # SOC 2 Type II control documentation
+├── docs/                         # See "Documentation" above
+│   ├── screenshots/
+│   ├── api/  guides/  release/  security/
 │
 ├── .github/workflows/
 │   ├── ci.yml                    # Lint, type-check, unit + integration tests
+│   ├── codeql.yml                # Static security analysis
 │   └── deploy.yml                # Build → staging → integration → production (blue/green)
 │
 ├── docker-compose.yml            # Full local stack
 ├── pyproject.toml                # Python dependencies + tooling config
-├── BRAND.md                      # UI/UX design tokens and decisions
-├── CLAUDE.md                     # Claude Code session instructions
-└── PLAN.md                       # Sprint roadmap
+└── LICENSE
 ```
 
 ---
@@ -245,8 +270,8 @@ synthetic-persona-sandbox/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/opb/synthetic-persona-sandbox.git
-cd synthetic-persona-sandbox
+git clone https://github.com/OctavioPB/Synthetic_Persona_Sandbox.git
+cd Synthetic_Persona_Sandbox
 ```
 
 ### 2. Configure environment variables
@@ -340,7 +365,7 @@ If you prefer to run the API outside Docker (faster iteration):
 docker compose up -d postgres redis qdrant kafka schema-registry
 
 # Start API (reloads on file changes)
-uv run uvicorn api.main:app --reload --port 8000
+uv run uvicorn api.main:app --reload --port 8001
 
 # Start ARQ worker (separate terminal)
 uv run python -m api.worker
@@ -354,8 +379,8 @@ cd dashboard && npm run dev
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | **Dashboard** | http://localhost:5173 | — |
-| **API (Swagger UI)** | http://localhost:8000/docs | — |
-| **API (ReDoc)** | http://localhost:8000/redoc | — |
+| **API (Swagger UI)** | http://localhost:8001/docs | — |
+| **API (ReDoc)** | http://localhost:8001/redoc | — |
 | **Grafana** | http://localhost:3000 | admin / changeme |
 | **Prometheus** | http://localhost:9090 | — |
 | **Qdrant UI** | http://localhost:6333/dashboard | — |
@@ -412,7 +437,7 @@ Available DAGs:
 | `extract_segment_data` | Manual / daily | Pull behavioral data, compute embedding, store in Qdrant |
 | `run_simulation_pipeline` | Manual | Segment → persona inference → score storage |
 | `variant_competition` | Manual | Run N ad variants against same segment, rank by score |
-| `drift_check` | Daily 06:00 UTC | Flag segments with data older than 7 days |
+| `drift_check` | Daily 03:00 UTC | Flag segments with data older than 7 days |
 
 ---
 
@@ -427,7 +452,7 @@ With `AUTH_REQUIRED=false` (default), all requests are automatically authenticat
 With `AUTH_MODE=dev`, you can issue a token manually:
 
 ```bash
-curl -s -X POST http://localhost:8000/auth/dev-token \
+curl -s -X POST http://localhost:8001/auth/dev-token \
   -H "Content-Type: application/json" \
   -d '{"email": "you@example.com", "role": "marketer"}' \
   | jq .access_token
@@ -436,7 +461,7 @@ curl -s -X POST http://localhost:8000/auth/dev-token \
 Use the token in subsequent requests:
 
 ```bash
-curl -H "Authorization: Bearer <token>" http://localhost:8000/segments
+curl -H "Authorization: Bearer <token>" http://localhost:8001/segments
 ```
 
 ### API Keys
@@ -444,7 +469,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8000/segments
 Create a long-lived API key (requires admin role):
 
 ```bash
-curl -s -X POST http://localhost:8000/auth/keys \
+curl -s -X POST http://localhost:8001/auth/keys \
   -H "Content-Type: application/json" \
   -d '{"name": "My Integration Key", "role": "marketer", "expires_days": 90}'
 ```
@@ -452,7 +477,7 @@ curl -s -X POST http://localhost:8000/auth/keys \
 The `raw_key` field in the response (format: `spb_...`) is shown **once only**. Use it via:
 
 ```bash
-curl -H "X-API-Key: spb_..." http://localhost:8000/segments
+curl -H "X-API-Key: spb_..." http://localhost:8001/segments
 ```
 
 ### RBAC roles
@@ -481,7 +506,7 @@ curl -H "X-API-Key: spb_..." http://localhost:8000/segments
 
 ```bash
 # 1. Create a segment
-SEGMENT=$(curl -s -X POST http://localhost:8000/segments \
+SEGMENT=$(curl -s -X POST http://localhost:8001/segments \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Gen Z Madrid",
@@ -496,7 +521,7 @@ SEGMENT=$(curl -s -X POST http://localhost:8000/segments \
 SEGMENT_ID=$(echo $SEGMENT | jq -r .id)
 
 # 2. Launch a simulation
-curl -s -X POST http://localhost:8000/simulate/run \
+curl -s -X POST http://localhost:8001/simulate/run \
   -H "Content-Type: application/json" \
   -d "{
     \"segment_id\": \"$SEGMENT_ID\",
@@ -523,12 +548,9 @@ uv run pytest tests/integration/test_regression.py -v --tb=short
 # Full integration suite
 uv run pytest tests/integration/ -v
 
-# Simulation smoke tests
-uv run pytest tests/simulation/ -k smoke -v
-
 # Load test (20 concurrent users)
 uv run locust -f tests/load/locustfile.py --headless \
-  -u 20 -r 5 --run-time 60s --host http://localhost:8000
+  -u 20 -r 5 --run-time 60s --host http://localhost:8001
 ```
 
 ### Frontend tests
@@ -617,20 +639,13 @@ The CI/CD pipeline (`.github/workflows/deploy.yml`) automates this:
 
 ## Key Design Decisions
 
-### LLM is not in the hot path during inference
-The LLM (Claude) is called during simulation jobs, which run asynchronously via the ARQ job queue. The API returns 202 immediately; clients poll or stream via WebSocket. This decouples API latency from LLM latency (which can be 3–8s).
+- **Inference is asynchronous.** The API returns 202 and a worker calls Claude, so API latency does not depend on LLM latency.
+- **Identifiers are anonymized at ingestion.** User ids are HMAC-hashed and IPs truncated. Segment names and stimulus text are user input and reach the LLM as written.
+- **Tenancy is enforced in application code** by filtering on `org_id`; PostgreSQL row-level security is not used.
+- **Completed runs are cached** in Redis for 24 hours.
+- **Rate limiting is per organization**, 60 requests per minute on `POST /simulate/run`.
 
-### PII never reaches the LLM
-The segment definition fed to the persona inference service contains only aggregated, anonymized behavioral features — no individual user records, emails, or identifiers. This is enforced by the anonymization layer in `ingestion/anonymizer.py`.
-
-### Multi-tenancy via application-level org_id filtering
-Every query in every router filters by `claims.org_id`. There is no row-level security at the database level (PostgreSQL RLS is a future option). This means correct behavior depends entirely on the auth middleware being active — which is why `AUTH_REQUIRED=true` is enforced in production via the K8s ConfigMap.
-
-### Redis cache-aside for completed runs
-Completed simulation runs are immutable. `GET /simulate/runs/{id}` checks Redis first (24h TTL) before hitting PostgreSQL. Pending runs have a 30s TTL and are always re-fetched. This reduces DB load during real-time polling from multiple WebSocket clients.
-
-### Rate limiting per org, not per IP
-The sliding-window rate limiter keys on `org_id` (10 simulation requests/minute). IP-based limits are not used because all production traffic arrives through a load balancer with the same IP pool.
+More in [Architecture](docs/ARCHITECTURE.md).
 
 ---
 
@@ -648,7 +663,7 @@ The sliding-window rate limiter keys on `org_id` (10 simulation requests/minute)
 | **Health** | `GET /health` · `GET /metrics` |
 
 Full reference: [`docs/api/README.md`](docs/api/README.md)
-Interactive: http://localhost:8000/docs
+Interactive: http://localhost:8001/docs
 
 ---
 
@@ -658,7 +673,7 @@ Interactive: http://localhost:8000/docs
 |------|-----|---------------|
 | **Grafana** | http://localhost:3000 | API latency, simulation throughput, Kafka consumer lag |
 | **Prometheus** | http://localhost:9090 | Raw metrics: `api_request_latency_seconds`, `simulation_total`, `queue_depth` |
-| **API `/metrics`** | http://localhost:8000/metrics | Prometheus scrape endpoint |
+| **API `/metrics`** | http://localhost:8001/metrics | Prometheus scrape endpoint |
 
 SLO targets (production):
 - API p99 latency < 2s
@@ -681,17 +696,14 @@ Check `AUTH_REQUIRED` in your `.env`. It defaults to `false` — if it's been se
 The ARQ worker is not running. Start it with `uv run python -m api.worker` in a separate terminal.
 
 **WebSocket connection drops immediately**
-In dev, the Vite proxy must be running. Confirm you're accessing the dashboard via `http://localhost:5173` (not directly at port 8000). The Vite config proxies `/ws` to `ws://localhost:8000`.
-
-**`check_env()` fails on a new Gym environment**
-Observation values must be clipped to `[0, 1]`. See the lesson in `CLAUDE.md` under "S3 — Entorno gym".
+In dev, the Vite proxy must be running. Confirm you're accessing the dashboard via `http://localhost:5173` (not directly at port 8001). The Vite config proxies `/ws` to `ws://localhost:8001`.
 
 ---
 
 ## Contributing
 
 1. Create a branch: `git checkout -b feat/my-feature`
-2. Follow the conventions in `CLAUDE.md` (Python type hints, Pydantic v2, no `Any` without comment)
+2. Follow the conventions in [Engineering](docs/ENGINEERING.md)
 3. Run the full test suite: `uv run pytest tests/ -v`
 4. Run linters: `uv run ruff check . && uv run mypy api/`
 5. Open a PR against `main`
